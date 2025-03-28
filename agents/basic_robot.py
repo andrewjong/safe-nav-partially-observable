@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import warnings
 
 class RobotParams:
-    world_x_size: int = 50
-    world_y_size: int = 50
+    world_x_size: int = 80
+    world_y_size: int = 30
 
     v_max: float = 10.0
     omega_max: float = 2.5
@@ -57,17 +57,23 @@ class BasicRobot:
     
 
 def plot_robot_trajectory(robot: BasicRobot, trajectory: np.ndarray) -> None:
-    f = plt.figure(figsize=(5, 5))
+    ratio_window = robot_params.world_x_size / robot_params.world_y_size
+    if ratio_window > 1:
+        f = plt.figure(figsize=(5 , 5/ ratio_window))
+    else:
+        f = plt.figure(figsize=(5 * ratio_window, 5 ))
     ax = f.add_subplot(111)
     ax.scatter(trajectory[:, 0], trajectory[:, 1])
     ax.set_xlim(0, robot_params.world_x_size)
     ax.set_ylim(0, robot_params.world_y_size)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
     plt.show()
 
 if __name__ == "__main__":
     robot_params = RobotParams()
     robot = BasicRobot(robot_params)
-    robot.reset(10., 10., 0.)
+    robot.reset(40., 10., 0.)
     trajectory = np.zeros((100, 3))
     for i in range(100):
         robot.dynamic_step(4., 0.4)

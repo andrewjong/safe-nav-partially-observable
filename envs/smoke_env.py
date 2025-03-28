@@ -25,12 +25,12 @@ class SmokeEnv(gym.Env):
 
         self.smoke_simulator = StaticSmoke(env_params.world_x_size, env_params.world_y_size, smoke_blob_params)
 
-        self.robot_params.world_x_size = self.env_params.world_x_size
-        self.robot_params.world_y_size = self.env_params.world_y_size
+        self.robot_params.world_x_size = self.env_params.world_x_size - 1
+        self.robot_params.world_y_size = self.env_params.world_y_size - 1
 
         for blob in self.smoke_blob_params:
-            blob.world_x_size = self.env_params.world_x_size
-            blob.world_y_size = self.env_params.world_y_size
+            blob.world_x_size = self.env_params.world_x_size - 1
+            blob.world_y_size = self.env_params.world_y_size - 1
 
 
         self.action_space = spaces.Box(low=np.array([self.robot_params.v_min, self.robot_params.omega_min]),
@@ -39,7 +39,7 @@ class SmokeEnv(gym.Env):
         
         # 0: x, 1: y, 2: theta, 3: smoke_density
         self.observation_space = spaces.Box(low=np.array([0, 0, 0, 0]),
-                                             high=np.array([self.env_params.world_x_size, self.env_params.world_y_size, 2*np.pi, 1.]),
+                                             high=np.array([self.env_params.world_x_size - 1, self.env_params.world_y_size - 1, 2*np.pi, 1.]),
                                              shape=(4,))
 
         self.robot = BasicRobot(robot_params)
@@ -96,9 +96,11 @@ class SmokeEnv(gym.Env):
             self.window["fig"], self.window["ax"] = plt.subplots()
             self.window["cax"] = self.window["ax"].imshow(
                 self.smoke_simulator.get_smoke_map(),
-                cmap='gray'
+                cmap='gray',
+                extent=[0, self.env_params.world_x_size, 0, self.env_params.world_y_size],
+                origin='lower'
             )
-            self.window["ax"].set_axis_off()
+            # self.window["ax"].set_axis_off()
             self.window["fig"].colorbar(self.window["cax"], ax=self.window["ax"], label="Smoke Density")
             self.window["cax"].set_clim(vmin=np.min(0.0),
                                         vmax=np.max(1.0))
@@ -108,7 +110,7 @@ class SmokeEnv(gym.Env):
 
         # Plot the agent's location as a blue arrow
         self.window["ax"].arrow(self.robot.pos_x, self.robot.pos_y, np.cos(self.robot.angle), np.sin(self.robot.angle), 
-                                head_width=0.5, head_length=0.5, fc='b', ec='b')
+                                head_width=1., head_length=1., fc='b', ec='b')
         
         # Redraw the plot to update the frame
         plt.draw()
@@ -119,17 +121,17 @@ class SmokeEnv(gym.Env):
 
 if __name__ == "__main__":
     env_params = EnvParams()
-    env_params.world_x_size = 50
+    env_params.world_x_size = 80
     env_params.world_y_size = 50
     env_params.max_steps = 100
     env_params.render = True
 
     robot_params = RobotParams()
     smoke_blob_params = [
-        SmokeBlobParams(x_pos=10, y_pos=40, intensity=2.0, spread_rate=1.0),
-        SmokeBlobParams(x_pos=20, y_pos=20, intensity=1.5, spread_rate=3.0),
-        SmokeBlobParams(x_pos=15, y_pos=45, intensity=2.0, spread_rate=4.0),
-        SmokeBlobParams(x_pos=40, y_pos=40, intensity=2.5, spread_rate=4.0)
+        SmokeBlobParams(x_pos=10, y_pos=40, intensity=1.0, spread_rate=1.0),
+        SmokeBlobParams(x_pos=20, y_pos=20, intensity=1.0, spread_rate=3.0),
+        SmokeBlobParams(x_pos=15, y_pos=45, intensity=1.0, spread_rate=4.0),
+        SmokeBlobParams(x_pos=40, y_pos=40, intensity=1.0, spread_rate=8.0)
     ]
 
     env = SmokeEnv(env_params, robot_params, smoke_blob_params)
@@ -137,6 +139,6 @@ if __name__ == "__main__":
 
     for _ in range(100):
         state, reward, terminated, truncated, info = env.step(env.action_space.sample())
-        print(state[3])
+        print(np.round(state[3], 2))
 
     env.close()
