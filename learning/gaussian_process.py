@@ -8,7 +8,7 @@ from sklearn.gaussian_process.kernels import RBF, Matern, ConstantKernel as C
 
 from simulator.static_smoke import StaticSmoke, SmokeBlobParams
 
-from learning_models.base_model import BaseModel
+from learning.base_model import BaseModel
 
 class Kernel:
     RBF = RBF(length_scale=0.45)

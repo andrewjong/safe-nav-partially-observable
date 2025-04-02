@@ -5,7 +5,8 @@ from simulator.static_smoke import StaticSmoke, SmokeBlobParams
 from agents.basic_robot import BasicRobot, RobotParams
 from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
-
+from matplotlib.patches import Circle
+from matplotlib.patches import FancyArrow, Arrow
 @dataclass
 class EnvParams:
     world_x_size: int = field(default=50)
@@ -14,6 +15,8 @@ class EnvParams:
     max_steps: int = field(default=1000)
     render: bool = field(default=False)
     clock: float = field(default=0.1)
+
+    goal_location: tuple[int, int] | None = field(default=None)
 
 class SmokeEnv(gym.Env):
     def __init__(self, env_params: EnvParams, robot_params: RobotParams, smoke_blob_params: list[SmokeBlobParams]) -> None:
@@ -46,11 +49,15 @@ class SmokeEnv(gym.Env):
         self.window = {"fig": None, "ax": None, "cax": None}
         self.clock = self.env_params.clock if self.env_params.render else None
 
-    def reset(self, seed=None, options=None):
+    def reset(self, initial_state=None, seed=None, options=None):
         super().reset(seed=seed)
 
         self.window = {"fig": None, "ax": None, "cax": None}
-        obs = self.observation_space.sample()
+        if initial_state is None:
+            obs = self.observation_space.sample()
+        else:
+            obs = initial_state
+        obs[3] = self.smoke_simulator.get_smoke_density(obs[0], obs[1])
 
         self.robot.reset(obs[0], obs[1], obs[2])
 
@@ -105,8 +112,14 @@ class SmokeEnv(gym.Env):
             self.window["cax"].set_clim(vmin=np.min(0.0),
                                         vmax=np.max(1.0))
             
+            if self.env_params.goal_location is not None:
+                circle = Circle((self.env_params.goal_location[0], self.env_params.goal_location[1]), 
+                              radius=2.0, color='g', fill=True, alpha=0.8)
+                self.window["ax"].add_patch(circle)
+            
         for arrow in self.window["ax"].patches:
-            arrow.remove()
+            if isinstance(arrow, (FancyArrow, Arrow)):  
+                arrow.remove()
 
         # Plot the agent's location as a blue arrow
         self.window["ax"].arrow(self.robot.pos_x, self.robot.pos_y, np.cos(self.robot.angle), np.sin(self.robot.angle), 
@@ -125,6 +138,7 @@ if __name__ == "__main__":
     env_params.world_y_size = 50
     env_params.max_steps = 100
     env_params.render = True
+    # env_params.goal_location = (40, 40)
 
     robot_params = RobotParams()
     smoke_blob_params = [

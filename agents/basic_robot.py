@@ -7,10 +7,10 @@ class RobotParams:
     world_y_size: int = 30
 
     v_max: float = 10.0
-    omega_max: float = 2.5
+    omega_max: float = 4.0
 
     v_min: float = 0.0
-    omega_min: float = -2.5
+    omega_min: float = -4.0
 
     dt: float = 0.1
 
@@ -32,6 +32,9 @@ class BasicRobot:
             warnings.warn(f"omega must be between {self.robot_params.omega_min} and {self.robot_params.omega_max}")
             omega = np.clip(omega, self.robot_params.omega_min, self.robot_params.omega_max)
 
+
+        # Euler integration.
+        # TODO: Use Runge-Kutta method.
         self.pos_x += v * np.cos(self.angle) * self.robot_params.dt
         self.pos_y += v * np.sin(self.angle) * self.robot_params.dt
 
