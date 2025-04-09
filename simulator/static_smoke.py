@@ -47,13 +47,20 @@ class StaticSmoke:
     def get_smoke_map(self):
         return self.smoke_map
     
-    def plot_smoke_map(self):
-        plt.imshow(self.smoke_map, cmap='gray', extent=[0, self.x_size, 0, self.y_size], origin='lower')
-        plt.colorbar(label='Smoke Density')
-        plt.title('Static Smoke Map')
-        plt.xlabel('X Position')
-        plt.ylabel('Y Position')
-        plt.show()
+    def plot_smoke_map(self, fig: plt.Figure = None, ax: plt.Axes = None):
+        if fig is None or ax is None:
+            fig, ax = plt.subplots()
+
+        if ax.images:
+            ax.images[0].set_array(self.smoke_map)
+        else:
+            ax_ = ax.imshow(self.smoke_map, cmap='gray', extent=[0, self.x_size, 0, self.y_size], origin='lower')
+            #fig.colorbar(ax_, label='Smoke Density')
+            ax.set_title('Static Smoke Map')
+            ax.set_xlabel('X Position')
+            ax.set_ylabel('Y Position')
+
+        fig.canvas.draw()
 
 
 if __name__ == "__main__":

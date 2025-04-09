@@ -47,7 +47,7 @@ class SmokeEnv(gym.Env):
 
         self.robot = BasicRobot(robot_params)
         self.window = {"fig": None, "ax": None, "cax": None}
-        self.clock = self.env_params.clock if self.env_params.render else None
+        self.clock = self.env_params.clock
 
     def reset(self, initial_state=None, seed=None, options=None):
         super().reset(seed=seed)
@@ -76,6 +76,9 @@ class SmokeEnv(gym.Env):
         return 0.
 
     def _get_terminated(self, obs):
+        if self.env_params.goal_location is not None:
+            if np.linalg.norm(obs[:2] - self.env_params.goal_location) < 1.0:
+                return True
         return False
     
     def _get_truncated(self, obs):
@@ -98,9 +101,14 @@ class SmokeEnv(gym.Env):
 
         return obs, reward, terminated, truncated, info
     
-    def _render_frame(self):
+    def _render_frame(self, fig: plt.Figure = None, ax: plt.Axes = None):
         if self.window["fig"] is None:
-            self.window["fig"], self.window["ax"] = plt.subplots()
+            if fig is not None and ax is not None:
+                self.window["fig"] = fig
+                self.window["ax"] = ax
+            else:
+                self.window["fig"], self.window["ax"] = plt.subplots()
+
             self.window["cax"] = self.window["ax"].imshow(
                 self.smoke_simulator.get_smoke_map(),
                 cmap='gray',
@@ -108,25 +116,27 @@ class SmokeEnv(gym.Env):
                 origin='lower'
             )
             # self.window["ax"].set_axis_off()
-            self.window["fig"].colorbar(self.window["cax"], ax=self.window["ax"], label="Smoke Density")
+            self.window["ax"].set_title("Simulation")
+            #self.window["fig"].colorbar(self.window["cax"], ax=self.window["ax"], label="Smoke Density", shrink=0.5)
             self.window["cax"].set_clim(vmin=np.min(0.0),
                                         vmax=np.max(1.0))
             
             if self.env_params.goal_location is not None:
                 circle = Circle((self.env_params.goal_location[0], self.env_params.goal_location[1]), 
-                              radius=2.0, color='g', fill=True, alpha=0.8)
+                              radius=1.0, color='g', fill=True, alpha=0.8)
                 self.window["ax"].add_patch(circle)
-            
+        
         for arrow in self.window["ax"].patches:
             if isinstance(arrow, (FancyArrow, Arrow)):  
                 arrow.remove()
 
         # Plot the agent's location as a blue arrow
-        self.window["ax"].arrow(self.robot.pos_x, self.robot.pos_y, np.cos(self.robot.angle), np.sin(self.robot.angle), 
+        self.window["ax"].arrow(self.robot.pos_x, self.robot.pos_y, 0.1*np.cos(self.robot.angle), 0.1*np.sin(self.robot.angle), 
                                 head_width=1., head_length=1., fc='b', ec='b')
         
         # Redraw the plot to update the frame
-        plt.draw()
+        self.window["fig"].canvas.draw()
+        self.window["fig"].canvas.flush_events()
         plt.pause(self.clock)
 
     def close(self):
@@ -137,8 +147,8 @@ if __name__ == "__main__":
     env_params.world_x_size = 80
     env_params.world_y_size = 50
     env_params.max_steps = 100
-    env_params.render = True
-    # env_params.goal_location = (40, 40)
+    env_params.render = False
+    env_params.goal_location = (40, 40)
 
     robot_params = RobotParams()
     smoke_blob_params = [
@@ -151,8 +161,10 @@ if __name__ == "__main__":
     env = SmokeEnv(env_params, robot_params, smoke_blob_params)
     env.reset()
 
+    fig, ax = plt.subplots(figsize=(4, 4))
+
     for _ in range(100):
         state, reward, terminated, truncated, info = env.step(env.action_space.sample())
-        print(np.round(state[3], 2))
+        env._render_frame(fig=fig, ax=ax)
 
     env.close()

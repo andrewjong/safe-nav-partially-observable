@@ -9,26 +9,24 @@ from simulator.static_smoke import SmokeBlobParams
 import numpy as np
 
 from src.mppi import Navigator, dubins_dynamics_tensor
+from matplotlib.patches import FancyArrow, Arrow
 
 def main():
     env_params = EnvParams()
-    env_params.world_x_size = 120
-    env_params.world_y_size = 100
+    env_params.world_x_size = 30
+    env_params.world_y_size = 40
     env_params.max_steps = 2000
-    env_params.render = True
-    env_params.goal_location = (50, 50)
+    env_params.render = False
+    env_params.goal_location = (25, 37)
 
     robot_params = RobotParams()
     smoke_blob_params = [
-        SmokeBlobParams(x_pos=10, y_pos=80, intensity=1.0, spread_rate=15.0),
-        SmokeBlobParams(x_pos=80, y_pos=10, intensity=1.0, spread_rate=15.0),
-        SmokeBlobParams(x_pos=20, y_pos=20, intensity=1.0, spread_rate=6.0),
-        SmokeBlobParams(x_pos=50, y_pos=50, intensity=1.0, spread_rate=5.0),
-        SmokeBlobParams(x_pos=70, y_pos=70, intensity=1.0, spread_rate=8.0)
+        SmokeBlobParams(x_pos=15, y_pos=20, intensity=1.0, spread_rate=8.0),
     ]
 
     env = SmokeEnv(env_params, robot_params, smoke_blob_params)
-    state, _ = env.reset(initial_state=np.array([10.0, 10.0, 0.0, 0.0]))
+
+    state, _ = env.reset(initial_state=np.array([5.0, 5.0, 0.0, 0.0]))
 
     learner = GaussianProcess()
     
@@ -45,102 +43,149 @@ def main():
     solver = WarmStartSolver(
         config=WarmStartSolverConfig(
             system_name="dubins3d",
-            domain_cells=[120, 100, 100],
+            domain_cells=[30, 40, 40],
             domain=[[0, 0, 0], [env_params.world_x_size, env_params.world_y_size, 2*np.pi]],
             mode="brt",
-            accuracy="low",
+            accuracy="medium",
             converged_values=None,
-            until_convergent=True,
+            until_convergent=False,
             print_progress=False,
         )
     )
 
-    navigator = Navigator()
-    navigator.set_odom(state[:2],state[2])
-    navigator.set_map(builder.failure_map, [120, 100], [0, 0], 1.0)
-    navigator.set_goal(list(env_params.goal_location))
+    nom_controller = Navigator()
+    nom_controller.set_odom(state[:2],state[2])
+    nom_controller.set_map(builder.failure_map, [30, 40], [0, 0], 1.0)
+    nom_controller.set_goal(list(env_params.goal_location))
 
-    nominal_action_w = navigator.get_command().item()
-    nominal_action = np.array([2, nominal_action_w])
+    # TODO: Make this part of the dynamics
+    NOMINAL_ACTION_V = 2.0
+    nominal_action_w = nom_controller.get_command().item()
+    nominal_action = np.array([NOMINAL_ACTION_V, nominal_action_w])
 
-    update_interval = 10
+    update_interval = 5
     values = None
 
-    # Real time plotting
-    f = plt.figure()
-    map_ax = f.add_subplot(111)
-
-    x = np.linspace(solver.config.domain[0][0], solver.config.domain[1][0], solver.config.domain_cells[0])
-    y = np.linspace(solver.config.domain[0][1], solver.config.domain[1][1], solver.config.domain_cells[1])
-
-    x, y = np.meshgrid(x, y)
-
-    map_cax = map_ax.imshow(builder.failure_map, extent=[0, env_params.world_x_size, 0, env_params.world_y_size], origin='lower', cmap='gray', vmin=0, vmax=1)
-    bar = f.colorbar(map_cax, ax=map_ax, label="Failure")
-    map_ax.set_title("Failure Map")
-    plt.draw()
-
-    f_continuous = plt.figure()
-    ax_continuous = f_continuous.add_subplot(111)
-    continuous_map_ax = ax_continuous.imshow(builder.build_continuous_map(learner), extent=[0, env_params.world_x_size, 0, env_params.world_y_size], origin='lower', cmap='gray', vmin=0, vmax=1)
-    ax_continuous.set_title("Continuous Map")
-    bar_continuous = f_continuous.colorbar(continuous_map_ax, ax=ax_continuous, label="Failure")
-    plt.draw()
-
-    # Create a new figure for the gradient plot
-    f_gradient = plt.figure()
     x = np.arange(env_params.world_x_size)
     y = np.arange(env_params.world_y_size)
     X, Y = np.meshgrid(x, y)
-    ax = f_gradient.add_subplot(111)
-    gradient_ax = ax.quiver(X, Y, np.zeros(X.shape), np.zeros(Y.shape), scale=50)
-    ax.set_title("Gradient")
+
+    f = plt.figure(figsize=(6, 6))
+    gs = f.add_gridspec(1, 3)
+    ax_env = f.add_subplot(gs[0])
+    ax_map = f.add_subplot(gs[1])
+    ax_fail = f.add_subplot(gs[2])
+
+    learner_gt = GaussianProcess()
+
+    for i in range(1000):
+        X_sample = np.concatenate([np.random.uniform(0, env_params.world_y_size, 1), np.random.uniform(0, env_params.world_x_size, 1)])
+        y_observe = env.smoke_simulator.get_smoke_density(X_sample[1], X_sample[0])
+        learner_gt.track_data(X_sample, y_observe)
+    learner_gt.update()
+
+
+    x = np.linspace(0, env_params.world_x_size, env_params.world_x_size)
+    y = np.linspace(0, env_params.world_y_size, env_params.world_y_size)
+    xy = np.array(list(product(y, x)))
+
+    y_pred, std = learner_gt.predict(xy)
+    y_pred = y_pred.reshape(env_params.world_y_size, env_params.world_x_size)
+    continuous_map = y_pred.reshape(int(env_params.world_y_size), int(env_params.world_x_size))
+    gt_failure_map = builder.rule_based_map(continuous_map)
+
+    plt.tight_layout()
     plt.draw()
 
-    # Create a line plot for the gradient values
+    traj_nonfail = []
+    traj_fail = []
 
+    # Create a line plot for the gradient values
     for t in range(1,env_params.max_steps):
         learner.track_data(state[0:2][::-1], state[3])
 
         if t % update_interval == 0:
             learner.update()
-            failure_map = builder.build_map(learner)
-            continuous_map = builder.build_continuous_map(learner)
-            map_cax.set_array(builder.failure_map)
+            builder.build_map(learner)
 
-            continuous_map_ax.set_array(continuous_map)
-            plt.draw()
-            if np.all(failure_map == 1):
+            if np.all(builder.failure_map == 1):
                 values = None
             else:
-                values = solver.solve(failure_map.T, target_time=-1.0, dt=0.1, epsilon=0.0001)
+                values = solver.solve(builder.failure_map.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
 
-        nominal_action = navigator.get_command()
-        nominal_action = np.array([2.0, nominal_action.item()])
+        nominal_action = nom_controller.get_command()
+        nominal_action = np.array([NOMINAL_ACTION_V, nominal_action.item()])
+        safe_action = nominal_action
 
         if values is not None:
-            grad_values = np.gradient(values)
-
-            gx, gy = grad_values[0][:,:,-1], grad_values[1][:,:,-1]
-
-            for coll in map_ax.collections:
-                coll.remove()
-
-            state_ind = solver._state_to_grid(state[:3])
-            z = values[:,:,state_ind[2]].T
-            contour = map_ax.contour(x, y, z, levels=[0], colors="red")
-            map_ax.clabel(contour, fmt="%2.1f", colors="black")
-
-            gradient_ax.set_UVC(gx.T, gy.T)
-            
-            plt.draw()
-
             safe_action, _, _ = solver.compute_safe_control(state[0:3], nominal_action, action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]), values=values)
         else:   
             safe_action = nominal_action
 
         state, reward, terminated, truncated, info = env.step(safe_action)
-        navigator.set_odom(state[:2], state[2])
+
+        if state[3] > builder.params.map_rule_threshold:
+            traj_fail.append(state[0:2])
+        else:
+            traj_nonfail.append(state[0:2])
+
+        if terminated:
+            break
+
+        nom_controller.set_odom(state[:2], state[2])
+        # nom_controller.set_map(builder.failure_map, [30, 40], [0, 0], 1.0)
+
+        # Real time plotting
+        env._render_frame(fig=f, ax=ax_env)
+        builder.plot_failure_map(fig=f, ax=ax_fail)
+
+        learner.plot_map(x_size=env_params.world_x_size, y_size=env_params.world_y_size, fig=f, ax=ax_map)
+
+        for arrow in ax_fail.patches:
+            if isinstance(arrow, (FancyArrow, Arrow)):  
+                arrow.remove()
+
+        for coll in ax_fail.collections:
+            coll.remove()
+
+        if values is not None:
+            is_safe, _, _ = solver.check_if_safe(state[:3], values)
+            color_robot = 'g' if is_safe else 'r'
+        else:
+            color_robot = 'g'
+
+        # Plot the agent's location as a blue arrow
+        ax_fail.arrow(state[0], state[1], np.cos(state[2])*0.1, np.sin(state[2])*0.1, 
+                                    head_width=1., head_length=1., fc=color_robot, ec=color_robot)
+        
+        if len(traj_nonfail) > 0:
+            ax_fail.scatter(np.array(traj_nonfail)[:, 0], np.array(traj_nonfail)[:, 1], color='green', label='Non-fail', marker='.', s=0.2)
+        if len(traj_fail) > 0:
+            ax_fail.scatter(np.array(traj_fail)[:, 0], np.array(traj_fail)[:, 1], color='red', label='Fail', marker='.', s=0.2)
+
+        if values is None:
+            continue
+
+        state_ind = solver._state_to_grid(state[:3])
+        z = values[:,:,state_ind[2]].T
+        z_mask = z > 0.1
+
+        # contour = ax_fail.contour(x, y, z, levels=10, cmap='viridis')
+        # ax_fail.clabel(contour, fmt="%2.1f", colors="black", fontsize=5)
+
+        ax_fail.contour(x, y, z_mask, levels=[0.5], colors='green')
+
+        ax_fail.contour(x, y, gt_failure_map, levels=[0.5], colors='red')
+
+        plt.tight_layout()
+        plt.draw()
+
+    figure_name = input('Enter the name of the figure: ')
+    f.savefig(f'misc/{figure_name}.png', bbox_inches='tight')
+
+    print(f'Terminated at time {t*env_params.clock} seconds')
+    print(f'Time for fail trajectory: {len(traj_fail) * env_params.clock} seconds')
+    print(f'Time for non-fail trajectory: {len(traj_nonfail) * env_params.clock} seconds')
 
     env.close()
 

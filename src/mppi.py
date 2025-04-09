@@ -515,7 +515,7 @@ class Navigator:
         return collisions
 
 
-    def mppi_cost_func(self, current_state: torch.Tensor, action: torch.Tensor, t, weights=(1, 0.5)) -> torch.Tensor:
+    def mppi_cost_func(self, current_state: torch.Tensor, action: torch.Tensor, t, weights=(1, 2.5)) -> torch.Tensor:
         """
         current_state: shape(num_samples, dim_x)
         return:

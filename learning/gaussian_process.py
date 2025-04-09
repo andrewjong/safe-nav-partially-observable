@@ -12,11 +12,11 @@ from learning.base_model import BaseModel
 
 class Kernel:
     RBF = RBF(length_scale=0.45)
-    Matern = Matern(length_scale=0.45)
+    Matern = Matern(length_scale=5.0)
     ConstantKernel = C()
 
 N_RESTARTS_OPTIMIZER = 10
-NORMALIZE_Y = True
+NORMALIZE_Y = False
 
 class GaussianProcess(BaseModel):
     def __init__(self, kernel: Kernel = Kernel.Matern):
@@ -45,6 +45,29 @@ class GaussianProcess(BaseModel):
     def score(self, x, y_true):
         y_pred, _ = self.predict(x)
         return mean_squared_error(y_true, y_pred)
+    
+    def plot_map(self, x_size, y_size, fig: plt.Figure = None, ax: plt.Axes = None):
+        x = np.linspace(0, x_size, x_size)
+        y = np.linspace(0, y_size, y_size)
+        xy = np.array(list(product(y, x)))
+
+        y_pred, std = self.predict(xy)
+        y_pred = y_pred.reshape(y_size, x_size)
+
+        if fig is None or ax is None:
+            fig, ax = plt.subplots()
+
+        if ax.images:
+            ax.images[0].set_array(y_pred)
+        else:
+            ax_ = ax.imshow(y_pred, cmap='gray', vmin=0, vmax=1.0, extent=[0, x_size, 0, y_size], origin='lower')
+            ax.set_title('Predicted Map')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            #fig.colorbar(ax_, label='Estimated Smoke Density', shrink=0.5)
+
+        fig.canvas.draw()
+
     
 if __name__ == '__main__':
     x_size, y_size = 80, 50
@@ -85,5 +108,9 @@ if __name__ == '__main__':
     ax[2].imshow(std, vmin=0, vmax=std.max(), origin='lower', cmap='gray')
     ax[2].set_title('Std')
 
+    plt.show()
+
+    fig, ax = plt.subplots()
+    gp.plot_map(x_size, y_size, fig=fig, ax=ax)
     plt.show()
 

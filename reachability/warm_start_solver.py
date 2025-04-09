@@ -31,7 +31,7 @@ class WarmStartSolverConfig:
     print_progress: bool = True
 
 
-speed = 0.5
+speed = 2.0
 class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
     def __init__(self,
                  max_turn_rate=1.,
@@ -181,15 +181,11 @@ class WarmStartSolver:
             return None, None
         print("Grid map shape:", grid_map.shape) if self.config.print_progress else None
         print("Domain cells:", self.config.domain_cells) if self.config.print_progress else None
-        # if list(grid_map.shape) != self.config.domain_cells[:2]:
-        #     raise ValueError(f"Grid map shape must match last grid map shape and domain cells {grid_map.shape} != {self.config.domain_cells[:2]}")
 
         if self.last_values is None:
             print("Computing value function from scratch") if self.config.print_progress else None
             initial_values = self.compute_initial_values(grid_map)
         else:
-            # if grid_map.shape != self.last_grid_map.shape:
-            #     raise ValueError(f"Grid map shape must match last grid map shape {grid_map.shape} != {self.last_grid_map.shape}")
             print("Computing warm-started value function") if self.config.print_progress else None
             initial_values = self.compute_warm_start_values(grid_map)
 
@@ -269,7 +265,7 @@ class WarmStartSolver:
         action = nominal_action
 
         if not is_safe:
-            print("\033[31m{}\033[0m".format("Safe controller intervening"))
+            print("\033[31m{}\033[0m".format("Safe controller intervening. Value is:"))
 
             state_ind = self._state_to_grid(state)
 
@@ -277,15 +273,16 @@ class WarmStartSolver:
             grad_y = values_grad[1][state_ind[0], state_ind[1], state_ind[2]]
             grad_theta = values_grad[2][state_ind[0], state_ind[1], state_ind[2]]
 
-            # if np.cos(state[2]) * grad_x + np.sin(state[2]) * grad_y > 0:
-            #     safe_v = action_bounds[0][0]
-            # else:
-            #     safe_v = action_bounds[0][1]
+            # TODO: Replace temporal straight forward solution
+            N_samples = 1000
+            w_samples = np.linspace(action_bounds[1][0], action_bounds[1][1], N_samples)
 
-            if np.sign(grad_theta) < 0:
-                safe_w = action_bounds[1][0]
-            else:
-                safe_w = action_bounds[1][1]
+            opt_problem = lambda w: 0.5 * np.cos(state[2]) * grad_x + 0.5 * np.sin(state[2]) * grad_y + grad_theta * w
+
+            w_opt_ind = np.argmax(opt_problem(w_samples))
+            w_opt = w_samples[w_opt_ind]
+            safe_w = w_opt
+
             action = np.array([nominal_action[0], safe_w])
         else:
             print("\033[32m{}\033[0m".format("Safe controller not intervening"))
@@ -293,9 +290,7 @@ class WarmStartSolver:
         return action, value, initial_value
 
     def _state_to_grid(self, state):
-        # TODO: check if this is correct
         grid = self.problem_definition["grid"]
-        # state = [state[1], state[0], np.pi / 2 - state[2]]
         state_ind = np.array(grid.nearest_index(state)) - 1
         return state_ind
 

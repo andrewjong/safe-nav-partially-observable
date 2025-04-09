@@ -74,9 +74,20 @@ class FailureMapBuilder():
 
         return failure_map
     
-    def plot_failure_map(self):
-        plt.imshow(self.failure_map, extent=[0, self.params.x_size, 0, self.params.y_size], origin='lower', cmap='gray')
-        plt.show()
+    def plot_failure_map(self, fig: plt.Figure = None, ax: plt.Axes = None):
+        if fig is None or ax is None:
+            fig, ax = plt.subplots()
+
+        if ax.images:
+            ax.images[0].set_array(self.failure_map)
+        else:
+            ax_ = ax.imshow(self.failure_map, vmin=0.0, vmax=1.0, extent=[0, self.params.x_size, 0, self.params.y_size], origin='lower', cmap='gray')
+            #fig.colorbar(ax_, label='Failure', shrink=0.5)
+            ax.set_title('Failure Map')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+        
+        fig.canvas.draw()
 
 
 if __name__ == "__main__":
@@ -109,9 +120,11 @@ if __name__ == "__main__":
     y_true = smoke_simulator.get_smoke_map()
 
     plt.figure()
-    plt.imshow(y_true, vmin=0, vmax=y_true.max(), extent=[0, x_size, 0, y_size], origin='lower', cmap='gray')
+    plt.imshow(y_true, vmin=0.0, vmax=1.0, extent=[0, x_size, 0, y_size], origin='lower', cmap='gray')
     plt.show()
 
     failure_map = builder.build_map(gp)
     print("Failure map shape:", failure_map.shape)
-    builder.plot_failure_map()
+    fig, ax = plt.subplots()
+    builder.plot_failure_map(fig=fig, ax=ax)
+    plt.show()
