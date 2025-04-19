@@ -1,0 +1,3 @@
+[submodule "racecar_gym"]
+	path = racecar_gym
+	url = git@github.com:axelbr/racecar_gym.git
