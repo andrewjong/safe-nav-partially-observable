@@ -35,13 +35,17 @@ def main():
     # nom_controller.set_map(builder.failure_map, [30, 40], [0, 0], 1.0)
     # nom_controller.set_goal(list(env_params.goal_location))
 
+    occupancy_map = OccupancyMap(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
+
     observations, infos = env.reset()
+    lidar_distances, vehicle_x, vehicle_y, vehicle_angle = observations["0"][0:N_SENSORS], observations["0"][2 * N_SENSORS], observations["0"][2 * N_SENSORS + 1], observations["0"][2*N_SENSORS + 2]
+
+    occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
 
 
     # creates a failure map with the given width, height and resolution.
     # unobserved cells are initialized as fail set.
 
-    failure_map = FailureMapBuilder(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
     for _ in range(300):
         actions = {i: env.action_spaces[i].sample() for i in env.agents}
         observations, rewards, terminations, truncations, all_done, infos = env.step(actions)
@@ -61,7 +65,7 @@ def main():
 
         # update the fail set from the lidar observations. cells that are free are marked as safe.
         # assumes the lidar observations are equally spaced from 0 to 2*pi
-        failure_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
+        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
 
 
 
