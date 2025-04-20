@@ -1,6 +1,3 @@
-[submodule "racecar_gym"]
-	path = racecar_gym
-	url = git@github.com:axelbr/racecar_gym.git
 [submodule "hj_reachability"]
 	path = hj_reachability
 	url = git@github.com:StanfordASL/hj_reachability.git
