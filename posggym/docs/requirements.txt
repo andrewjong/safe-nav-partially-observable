@@ -1,0 +1,6 @@
+posggym
+sphinx-autobuild
+sphinx-rtd-theme
+myst-parser
+tqdm
+Pillow
