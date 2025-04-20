@@ -6,10 +6,13 @@ import numpy as np
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal
 from matplotlib import pyplot as plt
+
 logger = logging.getLogger(__name__)
 
-def dubins_dynamics_tensor(current_state: torch.Tensor, action: torch.Tensor, dt: float) \
-        -> torch.Tensor:
+
+def dubins_dynamics_tensor(
+    current_state: torch.Tensor, action: torch.Tensor, dt: float
+) -> torch.Tensor:
     """
     current_state: shape(num_samples, dim_x)
     action: shape(num_samples, dim_u)
@@ -19,10 +22,11 @@ def dubins_dynamics_tensor(current_state: torch.Tensor, action: torch.Tensor, dt
     return:
     next_state: shape(num_samples, dim_x)
     """
+
     def one_step_dynamics(state, action):
         """Compute the derivatives [dx/dt, dy/dt, dtheta/dt]."""
-        x_dot = 2.*torch.cos(state[:, 2])
-        y_dot = 2.*torch.sin(state[:, 2])
+        x_dot = 2.0 * torch.cos(state[:, 2])
+        y_dot = 2.0 * torch.sin(state[:, 2])
         theta_dot = action[:, 0]
         return torch.stack([x_dot, y_dot, theta_dot], dim=1)
 
@@ -42,6 +46,7 @@ def dubins_dynamics_tensor(current_state: torch.Tensor, action: torch.Tensor, dt
     next_state[..., -1] = next_state[..., -1] % (2 * np.pi)
     return next_state
 
+
 def _ensure_non_zero(cost, beta, factor):
     return torch.exp(-factor * (cost - beta))
 
@@ -55,6 +60,7 @@ def squeeze_n(v, n_squeeze):
         v = v.squeeze(0)
     return v
 
+
 def handle_batch_input(n):
     def _handle_batch_input(func):
         """For func that expect 2D input, handle input that have more than 2 dimensions by flattening them temporarily"""
@@ -67,15 +73,29 @@ def handle_batch_input(n):
                 if is_tensor_like(arg):
                     if len(arg.shape) > n:
                         # last dimension is type dependent; all previous ones are batches
-                        batch_dims = arg.shape[:-(n - 1)]
+                        batch_dims = arg.shape[: -(n - 1)]
                         break
                     elif len(arg.shape) < n:
                         n_batch_dims_to_add = n - len(arg.shape)
                         batch_ones_to_add = [1] * n_batch_dims_to_add
-                        args = [v.view(*batch_ones_to_add, *v.shape) if is_tensor_like(v) else v for v in args]
+                        args = [
+                            (
+                                v.view(*batch_ones_to_add, *v.shape)
+                                if is_tensor_like(v)
+                                else v
+                            )
+                            for v in args
+                        ]
                         ret = func(*args, **kwargs)
                         if isinstance(ret, tuple):
-                            ret = [squeeze_n(v, n_batch_dims_to_add) if is_tensor_like(v) else v for v in ret]
+                            ret = [
+                                (
+                                    squeeze_n(v, n_batch_dims_to_add)
+                                    if is_tensor_like(v)
+                                    else v
+                                )
+                                for v in ret
+                            ]
                             return ret
                         else:
                             if is_tensor_like(ret):
@@ -87,17 +107,33 @@ def handle_batch_input(n):
                 return func(*args, **kwargs)
 
             # reduce all batch dimensions down to the first one
-            args = [v.view(-1, *v.shape[-(n - 1):]) if (is_tensor_like(v) and len(v.shape) > 2) else v for v in args]
+            args = [
+                (
+                    v.view(-1, *v.shape[-(n - 1) :])
+                    if (is_tensor_like(v) and len(v.shape) > 2)
+                    else v
+                )
+                for v in args
+            ]
             ret = func(*args, **kwargs)
             # restore original batch dimensions; keep variable dimension (nx)
             if type(ret) is tuple:
-                ret = [v if (not is_tensor_like(v) or len(v.shape) == 0) else (
-                    v.view(*batch_dims, *v.shape[-(n - 1):]) if len(v.shape) == n else v.view(*batch_dims)) for v in
-                       ret]
+                ret = [
+                    (
+                        v
+                        if (not is_tensor_like(v) or len(v.shape) == 0)
+                        else (
+                            v.view(*batch_dims, *v.shape[-(n - 1) :])
+                            if len(v.shape) == n
+                            else v.view(*batch_dims)
+                        )
+                    )
+                    for v in ret
+                ]
             else:
                 if is_tensor_like(ret):
                     if len(ret.shape) == n:
-                        ret = ret.view(*batch_dims, *ret.shape[-(n - 1):])
+                        ret = ret.view(*batch_dims, *ret.shape[-(n - 1) :])
                     else:
                         ret = ret.view(*batch_dims)
             return ret
@@ -106,7 +142,8 @@ def handle_batch_input(n):
 
     return _handle_batch_input
 
-class MPPI():
+
+class MPPI:
     """
     Model Predictive Path Integral control
     This implementation batch samples the trajectories and so scales well with the number of samples K.
@@ -116,23 +153,32 @@ class MPPI():
     based off of https://github.com/ferreirafabio/mppi_pendulum
     """
 
-    def __init__(self, dynamics, running_cost, nx, noise_sigma, num_samples=100, horizon=15, device="cpu",
-                 dt=0.1,
-                 terminal_state_cost=None,
-                 lambda_=1.,
-                 noise_mu=None,
-                 u_min=None,
-                 u_max=None,
-                 u_init=None,
-                 U_init=None,
-                 u_scale=1,
-                 u_per_command=1,
-                 step_dependent_dynamics=False,
-                 rollout_samples=1,
-                 rollout_var_cost=0,
-                 rollout_var_discount=0.95,
-                 sample_null_action=False,
-                 noise_abs_cost=False):
+    def __init__(
+        self,
+        dynamics,
+        running_cost,
+        nx,
+        noise_sigma,
+        num_samples=100,
+        horizon=15,
+        device="cpu",
+        dt=0.1,
+        terminal_state_cost=None,
+        lambda_=1.0,
+        noise_mu=None,
+        u_min=None,
+        u_max=None,
+        u_init=None,
+        U_init=None,
+        u_scale=1,
+        u_per_command=1,
+        step_dependent_dynamics=False,
+        rollout_samples=1,
+        rollout_var_cost=0,
+        rollout_var_discount=0.95,
+        sample_null_action=False,
+        noise_abs_cost=False,
+    ):
         """
         :param dynamics: function(state, action) -> next_state (K x nx) taking in batch state (K x nx) and action (K x nu)
         :param running_cost: function(state, action) -> cost (K) taking in batch state and action (same as dynamics)
@@ -199,7 +245,9 @@ class MPPI():
         self.noise_mu = noise_mu.to(self.d)
         self.noise_sigma = noise_sigma.to(self.d)
         self.noise_sigma_inv = torch.inverse(self.noise_sigma)
-        self.noise_dist = MultivariateNormal(self.noise_mu, covariance_matrix=self.noise_sigma)
+        self.noise_dist = MultivariateNormal(
+            self.noise_mu, covariance_matrix=self.noise_sigma
+        )
         # T x nu control sequence
         self.U = U_init
         self.u_init = u_init.to(self.d)
@@ -247,7 +295,6 @@ class MPPI():
         # shift command 1 time step
         self.U = torch.roll(self.U, -1, dims=0)
         self.U[-1] = self.u_init
-        # print(f'state shape as input: {state.shape}')
         return self._command(state)
 
     def _command(self, state):
@@ -259,7 +306,7 @@ class MPPI():
         beta = torch.min(cost_total)
         self.cost_total_non_zero = _ensure_non_zero(cost_total, beta, 1 / self.lambda_)
         eta = torch.sum(self.cost_total_non_zero)
-        self.omega = (1. / eta) * self.cost_total_non_zero
+        self.omega = (1.0 / eta) * self.cost_total_non_zero
         for t in range(self.T):
             self.U[t] += torch.sum(self.omega.view(-1, 1) * self.noise[:, t], dim=0)
         action = self.U[:self.u_per_command]
@@ -304,7 +351,7 @@ class MPPI():
             # c.shape(M, K)
             cost_samples += c
             if self.M > 1:
-                cost_var += c.var(dim=0) * (self.rollout_var_discount ** t)
+                cost_var += c.var(dim=0) * (self.rollout_var_discount**t)
 
             # Save total states/actions
             states.append(state)
@@ -347,9 +394,13 @@ class MPPI():
             # the actions with low noise if all states have the same cost. With abs(noise) we prefer actions close to the
             # nomial trajectory.
         else:
-            action_cost = self.lambda_ * self.noise @ self.noise_sigma_inv  # Like original paper
+            action_cost = (
+                self.lambda_ * self.noise @ self.noise_sigma_inv
+            )  # Like original paper
 
-        self.cost_total, self.states, self.actions = self._compute_rollout_costs(self.perturbed_action)
+        self.cost_total, self.states, self.actions = self._compute_rollout_costs(
+            self.perturbed_action
+        )
         self.actions /= self.u_scale
 
         # action perturbation cost
@@ -370,10 +421,10 @@ class MPPI():
 
     def get_rollouts(self, state, num_rollouts=1):
         """
-            :param state: either (nx) vector or (num_rollouts x nx) for sampled initial states
-            :param num_rollouts: Number of rollouts with same action sequence - for generating samples with stochastic
-                                 dynamics
-            :returns states: num_rollouts x T x nx vector of trajectories
+        :param state: either (nx) vector or (num_rollouts x nx) for sampled initial states
+        :param num_rollouts: Number of rollouts with same action sequence - for generating samples with stochastic
+                             dynamics
+        :returns states: num_rollouts x T x nx vector of trajectories
 
         """
         state = state.view(-1, self.nx)
@@ -381,16 +432,21 @@ class MPPI():
             state = state.repeat(num_rollouts, 1)
 
         T = self.U.shape[0]
-        states = torch.zeros((num_rollouts, T + 1, self.nx), dtype=self.U.dtype, device=self.U.device)
+        states = torch.zeros(
+            (num_rollouts, T + 1, self.nx), dtype=self.U.dtype, device=self.U.device
+        )
         states[:, 0] = state
         for t in range(T):
-            states[:, t + 1] = self._dynamics(states[:, t].view(num_rollouts, -1),
-                                              self.u_scale * self.U[t].view(num_rollouts, -1), t)
+            states[:, t + 1] = self._dynamics(
+                states[:, t].view(num_rollouts, -1),
+                self.u_scale * self.U[t].view(num_rollouts, -1),
+                t,
+            )
         return states[:, 1:]
 
 
 class Navigator:
-    def __init__(self, planner_type="mppi", device='cpu', dtype=torch.float32, dt=0.1):
+    def __init__(self, planner_type="mppi", device="cpu", dtype=torch.float32, dt=0.1):
 
         self.device = device
         self.dtype = dtype
@@ -405,13 +461,14 @@ class Navigator:
         self._goal_torch = None
         self._goal_thresh = 0.1
 
-
     def get_command(self):
         x = self._odom_torch[0]
         y = self._odom_torch[1]
-        dist_goal = torch.sqrt((x - self._goal_torch[0]) ** 2 + (y - self._goal_torch[1]) ** 2)
+        dist_goal = torch.sqrt(
+            (x - self._goal_torch[0]) ** 2 + (y - self._goal_torch[1]) ** 2
+        )
         if dist_goal.item() < self._goal_thresh:
-            return torch.tensor([0])
+            return torch.tensor([0.0, 0.0])
         command = None
         if self.planner_type == "mppi":
             command = self.planner.command(self._odom_torch)
@@ -422,10 +479,11 @@ class Navigator:
         :param position: (array-like): [x, y, z]
         :param orientation: (array-like): theta
         """
-        self._odom_torch = torch.tensor([position[0],
-                                         position[1],
-                                         orientation],
-                                         dtype=self.dtype, device=self.device)
+        self._odom_torch = torch.tensor(
+            [position[0], position[1], orientation],
+            dtype=self.dtype,
+            device=self.device,
+        )
 
     def set_map(self, map_data, map_dim, map_origin, map_resolution):
         """
@@ -434,58 +492,65 @@ class Navigator:
         :param map_origin: (array-like): map origin as [x, y]
         :param map_resolution: (float): map resolution
         """
-        self._map_torch = torch.tensor(map_data, dtype=self.dtype, device=self.device).reshape(map_dim[0],
-                                                                                               map_dim[1])
+        self._map_torch = torch.tensor(
+            map_data, dtype=self.dtype, device=self.device
+        ).reshape(map_dim[0], map_dim[1])
         self._cell_size = map_resolution
-        self._map_origin_torch = torch.tensor([map_origin[0], map_origin[1]],
-                                              dtype=self.dtype, device=self.device)
+        self._map_origin_torch = torch.tensor(
+            [map_origin[0], map_origin[1]], dtype=self.dtype, device=self.device
+        )
 
     def set_goal(self, position):
         """
         :param position: (array-like): goal position [x, y]
         :param orientation: (array-like): goal orientation [x, y, z, w] quaternion
         """
-        self._goal_torch = torch.tensor([position[0], position[1]],
-                                        dtype=self.dtype, device=self.device)
-
+        self._goal_torch = torch.tensor(
+            [position[0], position[1]], dtype=self.dtype, device=self.device
+        )
 
     def get_sampled_trajectories(self):
         if self.planner_type == "mppi":
             # states: torch.tensor, shape(M, K, T, nx)
             trajectories = self.planner.states
             M, K, T, nx = trajectories.shape
-            return trajectories.view(M*K, T, nx)
+            return trajectories.view(M * K, T, nx)
 
     def make_mppi_config(self):
         mppi_config = {}
 
-        mppi_config['dynamics'] = dubins_dynamics_tensor
-        mppi_config['running_cost'] = self.mppi_cost_func
-        mppi_config['nx'] = 3    # [x, y, theta]
-        mppi_config['dt'] = self.dt
-        mppi_config['noise_sigma'] = torch.tensor([2], dtype=self.dtype, device=self.device)
-        mppi_config['num_samples'] = 200
-        mppi_config['horizon'] = 20
-        mppi_config['device'] = self.device
-        mppi_config['u_min'] = torch.tensor([-4])
-        mppi_config['u_max'] = torch.tensor([4])
-        mppi_config['lambda_'] = 1
-        mppi_config['rollout_samples'] = 1
-        mppi_config['terminal_state_cost'] = self.mppi_terminal_state_cost_funct
-        mppi_config['rollout_var_cost'] = 0.1  # Increase from 0
-        mppi_config['rollout_var_discount'] = 0.9  # Adjust from 0.95
-        mppi_config['u_init'] = torch.tensor([0.0], dtype=self.dtype, device=self.device)
+        mppi_config["dynamics"] = dubins_dynamics_tensor
+        mppi_config["running_cost"] = self.mppi_cost_func
+        mppi_config["nx"] = 3  # [x, y, theta]
+        mppi_config["dt"] = self.dt
+        mppi_config["noise_sigma"] = torch.eye(2, dtype=self.dtype, device=self.device)
+        mppi_config["num_samples"] = 200
+        mppi_config["horizon"] = 20
+        mppi_config["device"] = self.device
+        mppi_config["u_min"] = torch.tensor([-5, -4])
+        mppi_config["u_max"] = torch.tensor([5, 4])
+        mppi_config["lambda_"] = 1
+        mppi_config["rollout_samples"] = 1
+        mppi_config["terminal_state_cost"] = self.mppi_terminal_state_cost_funct
+        mppi_config["rollout_var_cost"] = 0.1  # Increase from 0
+        mppi_config["rollout_var_discount"] = 0.9  # Adjust from 0.95
+        mppi_config["u_init"] = torch.tensor(
+            [0.0, 0.0], dtype=self.dtype, device=self.device
+        )
+        mppi_config["u_per_command"] = 1
 
         return mppi_config
 
-
-    def _start_planner(self,):
-        if self.planner_type == 'mppi':
+    def _start_planner(
+        self,
+    ):
+        if self.planner_type == "mppi":
             mppi_config = self.make_mppi_config()
             return MPPI(**mppi_config)
 
-
-    def _compute_collision_cost(self, current_state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+    def _compute_collision_cost(
+        self, current_state: torch.Tensor, action: torch.Tensor
+    ) -> torch.Tensor:
         """
         current_state: shape(num_samples, dim_x)
         action: shape(num_samples, dim_u)
@@ -493,29 +558,42 @@ class Navigator:
         return:
         cost: shape(num_samples)
         """
-        position_map = (current_state[..., :2] - self._map_origin_torch) / self._cell_size
+        position_map = (
+            current_state[..., :2] - self._map_origin_torch
+        ) / self._cell_size
         position_map = torch.round(position_map).long().to(self.device)
         is_out_of_bound = torch.logical_or(
             torch.logical_or(
-                position_map[..., 0] < 0, position_map[..., 0] >= self._map_torch.shape[1]
+                position_map[..., 0] < 0,
+                position_map[..., 0] >= self._map_torch.shape[1],
             ),
             torch.logical_or(
-                position_map[..., 1] < 0, position_map[..., 1] >= self._map_torch.shape[0]
+                position_map[..., 1] < 0,
+                position_map[..., 1] >= self._map_torch.shape[0],
             ),
         )
-        position_map[..., 0] = torch.clamp(position_map[..., 0], 0, self._map_torch.shape[1] - 1)
-        position_map[..., 1] = torch.clamp(position_map[..., 1], 0, self._map_torch.shape[0] - 1)
+        position_map[..., 0] = torch.clamp(
+            position_map[..., 0], 0, self._map_torch.shape[1] - 1
+        )
+        position_map[..., 1] = torch.clamp(
+            position_map[..., 1], 0, self._map_torch.shape[0] - 1
+        )
         # Collision check
         collisions = self._map_torch[position_map[..., 1], position_map[..., 0]]
-        collisions = torch.where(collisions == -1, torch.tensor(0.0, device=self.device), collisions.float())
-        collisions = torch.where(collisions == 100, torch.tensor(1.0, device=self.device), collisions.float())
+        collisions = torch.where(
+            collisions == -1, torch.tensor(0.0, device=self.device), collisions.float()
+        )
+        collisions = torch.where(
+            collisions == 100, torch.tensor(1.0, device=self.device), collisions.float()
+        )
 
         # Out of bound cost
         collisions[is_out_of_bound] = 1.0
         return collisions
 
-
-    def mppi_cost_func(self, current_state: torch.Tensor, action: torch.Tensor, t, weights=(1, 2.5)) -> torch.Tensor:
+    def mppi_cost_func(
+        self, current_state: torch.Tensor, action: torch.Tensor, t, weights=(1, 2.5)
+    ) -> torch.Tensor:
         """
         current_state: shape(num_samples, dim_x)
         return:
@@ -527,17 +605,19 @@ class Navigator:
         cost = weights[0] * dist_goal_cost + weights[1] * collision_cost
         return cost
 
-    def mppi_terminal_state_cost_funct(self, states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
+    def mppi_terminal_state_cost_funct(
+        self, states: torch.Tensor, actions: torch.Tensor
+    ) -> torch.Tensor:
         """
         states: shape(M*K, T, dim_x)
         """
         return self.mppi_cost_func(states, actions, 1)
-    
+
 
 if __name__ == "__main__":
     state = torch.tensor([0, 0, np.pi])
     navigator = Navigator()
-    navigator.set_odom(state[:2],state[-1])
+    navigator.set_odom(state[:2], state[-1])
     navigator.set_map(np.ones((100, 100)), [100, 100], [0, 0], 0.5)
     navigator.set_goal([50, 50])
 
@@ -564,6 +644,6 @@ if __name__ == "__main__":
 
     print(command)
 
-    plt.scatter(col_x, col_y, c='red')
-    plt.scatter(non_col_x, non_col_y, c='green')
+    plt.scatter(col_x, col_y, c="red")
+    plt.scatter(non_col_x, non_col_y, c="green")
     plt.show()

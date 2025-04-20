@@ -130,7 +130,7 @@ class OccupancyMap:
         
         # Get robot position in grid coordinates
         robot_row, robot_col = self.world_to_grid(vehicle_x, vehicle_y)
-        
+
         # Number of lidar beams
         n_sensors = len(lidar_distances)
         
@@ -317,8 +317,11 @@ def main():
     MAP_HEIGHT = 30
     MAP_RESOLUTION = 1.0
 
-    N_SENSORS = 16
+    N_SENSORS = 32
+    ROBOT_ORIGIN = [1,1]
+    ROBOT_GOAL = [27, 28]
     env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
+    env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
 
 
 
@@ -335,27 +338,20 @@ def main():
         )
     )
 
-    # nom_controller = Navigator()
-    # nom_controller.set_odom(state[:2],state[2])
-    # nom_controller.set_map(builder.failure_map, [30, 40], [0, 0], 1.0)
-    # nom_controller.set_goal(list(env_params.goal_location))
 
     occupancy_map = OccupancyMap(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
 
     observations, infos = env.reset()
     lidar_distances, vehicle_x, vehicle_y, vehicle_angle = observations["0"][0:N_SENSORS], observations["0"][2 * N_SENSORS], observations["0"][2 * N_SENSORS + 1], observations["0"][2*N_SENSORS + 2]
 
-    occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
-    occupancy_map.plot()  # Initialize and show the plot
-
+    nom_controller = Navigator()
+    nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, [MAP_WIDTH, MAP_HEIGHT], ROBOT_ORIGIN, MAP_RESOLUTION)
+    nom_controller.set_goal(ROBOT_GOAL)
 
     # creates a failure map with the given width, height and resolution.
     # unobserved cells are initialized as fail set.
 
-    for _ in range(300):
-        actions = {i: env.action_spaces[i].sample() for i in env.agents}
-        observations, rewards, terminations, truncations, all_done, infos = env.step(actions)
-
+    for _ in range(3000):
         observation = observations["0"]
 
         lidar_distances = observation[0:N_SENSORS]
@@ -374,7 +370,23 @@ def main():
         occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
         occupancy_map.update_plot()  # Update the plot with new data
 
+        fail_set = occupancy_map.grid != occupancy_map.FREE
 
+        # compute a nominal action via MPPI
+        nom_controller.set_odom((vehicle_x, vehicle_y), vehicle_angle)
+        action = nom_controller.get_command().cpu().numpy()
+
+
+        # # now compute HJ reachability
+        # values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
+        # if values is not None:
+        #     safe_action, _, _ = solver.compute_safe_control(np.array([vehicle_x, vehicle_y, vehicle_angle]), nominal_action, action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]), values=values)
+        # else:   
+        #     safe_action = nominal_action
+
+
+        actions = {"0": action}
+        observations, rewards, terminations, truncations, all_done, infos = env.step(actions)
         if all_done:
             observations, infos = env.reset()
 
