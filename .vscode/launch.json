@@ -4,9 +4,8 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python Debugger: RaceCar Warm HJ",
             "type": "debugpy",
             "request": "launch",
             "env": {
@@ -15,6 +14,25 @@
             "program": "${workspaceFolder}/run/static_map_warm_hj.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal"
-        }
+        },
+        {
+            "name": "Python Debugger: Emanuel's",
+            "type": "debugpy",
+            "request": "launch",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "program": "${workspaceFolder}/run/static_map_warm_hj.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python Debugger: RaceCar Simple Usage",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/racecar_gym/examples/gym_examples/simple_usage.py",
+            "cwd": "${workspaceFolder}/racecar_gym/examples/gym_examples",
+            "console": "integratedTerminal"
+        },
     ]
 }
