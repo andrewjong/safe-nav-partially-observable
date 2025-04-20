@@ -9,6 +9,16 @@ from reachability.warm_start_solver import (WarmStartSolver,
 from src.mppi import Navigator, dubins_dynamics_tensor
 
 
+MAP_WIDTH = 30
+MAP_HEIGHT = 30
+MAP_RESOLUTION = 1.0
+
+N_SENSORS = 32
+MAX_SENSOR_DISTANCE = 5.0
+ROBOT_ORIGIN = [1,1]
+ROBOT_GOAL = [27, 28]
+
+
 class OccupancyMap:
     """
     A class to build and maintain an occupancy grid map from lidar observations.
@@ -65,6 +75,7 @@ class OccupancyMap:
         # Last known robot position for visualization
         self.last_robot_pos = None
         self.last_robot_angle = None
+        self.n_sensors = N_SENSORS
     
     def world_to_grid(self, x, y):
         """
@@ -132,13 +143,13 @@ class OccupancyMap:
         robot_row, robot_col = self.world_to_grid(vehicle_x, vehicle_y)
 
         # Number of lidar beams
-        n_sensors = len(lidar_distances)
+        self.n_sensors = len(lidar_distances)
         
         # Angle between consecutive lidar beams
-        angle_inc = 2 * math.pi / n_sensors
+        angle_inc = 2 * math.pi / self.n_sensors
         
         # Maximum distance to trace along each beam
-        max_dist = 5.0  # Assuming this is the max lidar range
+        MAX_SENSOR_DISTANCE = 5.0  # Assuming this is the max lidar range
         
         # Process each lidar beam
         for i, distance in enumerate(lidar_distances):
@@ -149,10 +160,10 @@ class OccupancyMap:
             beam_angle = beam_angle % (2 * math.pi)
             
             # Calculate end point of beam
-            if distance >= max_dist:
+            if distance >= MAX_SENSOR_DISTANCE:
                 # No obstacle detected, beam reaches max range
-                end_x = vehicle_x + max_dist * math.cos(beam_angle)
-                end_y = vehicle_y + max_dist * math.sin(beam_angle)
+                end_x = vehicle_x + MAX_SENSOR_DISTANCE * math.cos(beam_angle)
+                end_y = vehicle_y + MAX_SENSOR_DISTANCE * math.sin(beam_angle)
                 obstacle_detected = False
             else:
                 # Obstacle detected at distance
@@ -287,14 +298,12 @@ class OccupancyMap:
                 
                 # Draw lidar lines for visualization
                 if self.last_robot_angle is not None:
-                    n_sensors = 16  # Assuming 16 sensors as in the main code
-                    angle_inc = 2 * math.pi / n_sensors
-                    max_dist = 5.0
+                    angle_inc = 2 * math.pi / self.n_sensors
                     
-                    for i in range(n_sensors):
+                    for i in range(self.n_sensors):
                         beam_angle = self.last_robot_angle + i * angle_inc
-                        end_x = self.last_robot_pos[0] + max_dist * math.cos(beam_angle)
-                        end_y = self.last_robot_pos[1] + max_dist * math.sin(beam_angle)
+                        end_x = self.last_robot_pos[0] + MAX_SENSOR_DISTANCE * math.cos(beam_angle)
+                        end_y = self.last_robot_pos[1] + MAX_SENSOR_DISTANCE * math.sin(beam_angle)
                         
                         end_row, end_col = self.world_to_grid(end_x, end_y)
                         line = self.ax.plot([robot_col, end_col], [robot_row, end_row], 'r-', alpha=0.3)[0]
@@ -313,13 +322,6 @@ class OccupancyMap:
 
 def main():
 
-    MAP_WIDTH = 30
-    MAP_HEIGHT = 30
-    MAP_RESOLUTION = 1.0
-
-    N_SENSORS = 32
-    ROBOT_ORIGIN = [1,1]
-    ROBOT_GOAL = [27, 28]
     env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
     env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
 
