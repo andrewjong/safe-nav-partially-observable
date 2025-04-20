@@ -232,12 +232,14 @@ class OccupancyMap:
             self.fig, self.ax = plt.subplots(figsize=(8, 8))
             plt.ion()  # Enable interactive mode
             
-            # Create initial image
+            # Create initial image with origin at top left (0,0)
             cmap = plt.cm.colors.ListedColormap(['gray', 'white', 'black'])
             bounds = [-0.5, 0.5, 1.5, 2.5]
             norm = plt.cm.colors.BoundaryNorm(bounds, cmap.N)
             
-            self.map_img = self.ax.imshow(self.grid, cmap=cmap, norm=norm, origin='lower')
+            # Use origin='upper' to have (0,0) at top left
+            self.map_img = self.ax.imshow(self.grid, cmap=cmap, norm=norm, origin='upper', 
+                                         extent=[0, self.grid_width, self.grid_height, 0])
             
             # Add colorbar
             cbar = self.fig.colorbar(self.map_img, ticks=[0, 1, 2])
@@ -246,11 +248,17 @@ class OccupancyMap:
             # Set axis labels
             self.ax.set_xlabel('X (grid cells)')
             self.ax.set_ylabel('Y (grid cells)')
-            self.ax.set_title('Occupancy Map')
+            self.ax.set_title('Occupancy Map (Origin at top left)')
+            
+            # Add grid lines
+            self.ax.set_xticks(np.arange(0, self.grid_width + 1, 5))
+            self.ax.set_yticks(np.arange(0, self.grid_height + 1, 5))
+            self.ax.grid(color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
             
             # Add robot marker
             if self.last_robot_pos is not None:
                 robot_row, robot_col = self.world_to_grid(*self.last_robot_pos)
+                # For plotting with origin='upper', we use col for x and row for y
                 self.robot_marker = self.ax.plot([robot_col], [robot_row], 'ro', markersize=10)[0]
             
             self.fig.canvas.draw()
@@ -291,6 +299,9 @@ class OccupancyMap:
                         end_row, end_col = self.world_to_grid(end_x, end_y)
                         line = self.ax.plot([robot_col, end_col], [robot_row, end_row], 'r-', alpha=0.3)[0]
                         self.lidar_lines.append(line)
+            
+            # Update grid lines to ensure they're visible
+            self.ax.grid(color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
             
             self.fig.canvas.draw()
             plt.pause(0.001)
