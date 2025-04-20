@@ -15,7 +15,7 @@ from learning.gaussian_process import GaussianProcess
 from itertools import product
 import matplotlib.pyplot as plt
 from simulator.static_smoke import StaticSmoke, SmokeBlobParams
-from src.failure_map_builder import FailureMapBuilder, FailureMapParams
+from src.failure_map_builder import GPFailureMapBuilder, FailureMapParams
 
 
 @dataclass
@@ -345,7 +345,7 @@ class WarmStartSolver:
 
 if __name__ == "__main__":
     params = FailureMapParams(x_size=100, y_size=100, resolution=1, map_rule_type='threshold', map_rule_threshold=0.7)
-    builder = FailureMapBuilder(params)
+    builder = GPFailureMapBuilder(params)
 
     x_size, y_size = 80, 50
 

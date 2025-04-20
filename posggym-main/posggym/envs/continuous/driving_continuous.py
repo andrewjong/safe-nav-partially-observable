@@ -446,9 +446,9 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
         # Observes entity and distance to entity along a n_sensors rays from the agent
         # 0 to n_sensors = wall distance obs
         # n_sensors to (2 * n_sensors) = other vehicle dist
-        # Also observs angle, vx, vy, dest dx, desy dy
+        # Also observs x, y, angle, vx, vy, dest dx, desy dy
         self.sensor_obs_dim = self.n_sensors * 2
-        self.obs_dim = self.sensor_obs_dim + 5
+        self.obs_dim = self.sensor_obs_dim + 7
         sensor_low = [0.0] * self.sensor_obs_dim
         sensor_high = [self.obs_dist] * self.sensor_obs_dim
         self.observation_spaces = {
@@ -667,11 +667,13 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
         obs[flat_obs_idx] = ray_dists
 
         d = self.sensor_obs_dim
-        obs[d] = self.world.convert_angle_to_0_2pi_interval(state_i.body[2])
-        obs[d + 1] = max(-1.0, min(1.0, state_i.body[3]))
-        obs[d + 2] = max(-1.0, min(1.0, state_i.body[4]))
-        obs[d + 3] = abs(state_i.dest_coord[0] - pos_i[0])
-        obs[d + 4] = abs(state_i.dest_coord[1] - pos_i[1])
+        obs[d] = state_i.body[0]  # x coord
+        obs[d + 1] = state_i.body[1] # y coord
+        obs[d + 2] = self.world.convert_angle_to_0_2pi_interval(state_i.body[2]) # angle
+        obs[d + 3] = max(-1.0, min(1.0, state_i.body[3])) # vx
+        obs[d + 4] = max(-1.0, min(1.0, state_i.body[4])) # vy
+        obs[d + 5] = abs(state_i.dest_coord[0] - pos_i[0])  # x dest distance
+        obs[d + 6] = abs(state_i.dest_coord[1] - pos_i[1])  # y dest distance
 
         return obs
 
@@ -965,5 +967,41 @@ SUPPORTED_WORLDS: Dict[str, Dict[str, Any]] = {
         ),
         "supported_num_agents": 4,
         "max_episode_steps": 50,
+    },
+    "30x30ScatteredObstacleField": {
+        "world_str": (
+            "##############################\n"
+            "#+...........................#\n"
+            "#...#....#........#....#.....#\n"
+            "#..###..###......###....#....#\n"
+            "#..#.#..#.#......#.#...###...#\n"
+            "#.....#.........#.....#.#....#\n"
+            "#.................#.....#....#\n"
+            "#......#.....#.....#.........#\n"
+            "#........#..###..........#...#\n"
+            "#....#.........#....#..###...#\n"
+            "#...###..........#..#...#....#\n"
+            "#...#.#.............#........#\n"
+            "#.......#....#..........#....#\n"
+            "#.......###..###........###..#\n"
+            "#.......#.#..#.#........#.#..#\n"
+            "#.................#..........#\n"
+            "#....#..........###..........#\n"
+            "#...###.........#.#..#.......#\n"
+            "#...#.#.............###......#\n"
+            "#..............#.....#.#.....#\n"
+            "#...........#..###...........#\n"
+            "#.....#.....#..#.#...........#\n"
+            "#....###..................#..#\n"
+            "#....#.#....#....#...#...###.#\n"
+            "#..........###..###.#...#.#..#\n"
+            "#..........#.#..#.#.###......#\n"
+            "#..................#.#.......#\n"
+            "#...........................-#\n"
+            "#............................#\n"
+            "##############################\n"
+        ),
+        "supported_num_agents": 1,  # Can be adjusted as needed
+        "max_episode_steps": 100,  # Adjusted for navigating around obstacles
     },
 }

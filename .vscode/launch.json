@@ -11,7 +11,7 @@
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },
-            "program": "${workspaceFolder}/run/static_map_warm_hj.py",
+            "program": "${workspaceFolder}/run/racecar_warm_hj.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal"
         },

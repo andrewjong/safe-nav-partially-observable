@@ -2,7 +2,7 @@ from learning.base_model import BaseModel
 from learning.gaussian_process import GaussianProcess
 from itertools import product
 import matplotlib.pyplot as plt
-from src.failure_map_builder import FailureMapBuilder, FailureMapParams
+from src.failure_map_builder import GPFailureMapBuilder, FailureMapParams
 from envs.smoke_env import EnvParams, RobotParams, SmokeEnv
 from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfig
 from simulator.static_smoke import SmokeBlobParams
@@ -30,7 +30,7 @@ def main():
 
     learner = GaussianProcess()
     
-    builder = FailureMapBuilder(
+    builder = GPFailureMapBuilder(
         params=FailureMapParams(
             x_size=env_params.world_x_size, 
             y_size=env_params.world_y_size, 

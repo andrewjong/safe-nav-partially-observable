@@ -21,7 +21,7 @@ class FailureMapParams:
     map_rule_threshold: float
 
 
-class FailureMapBuilder():  
+class GPFailureMapBuilder():  
     def __init__(self, params: FailureMapParams):
         """
         Builds a failure map based on the given parameters.
@@ -92,7 +92,7 @@ class FailureMapBuilder():
 
 if __name__ == "__main__":
     params = FailureMapParams(x_size=80, y_size=50, resolution=1, map_rule_type='threshold', map_rule_threshold=0.7)
-    builder = FailureMapBuilder(params)
+    builder = GPFailureMapBuilder(params)
     print("Initial failure map shape:", builder.failure_map.shape)
     builder.plot_failure_map()
 
