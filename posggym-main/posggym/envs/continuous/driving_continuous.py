@@ -655,6 +655,57 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
                         other_v_state.status[1] = int(True)
                         collision_types[other_idx] = CollisionType.AGENT
 
+            # Check for wall or boundary collisions
+            # Get the agent's position
+            agent_pos = next_v_body_state[:2]
+            
+            # Check if the agent is outside the world boundaries
+            world_size = self.world.size
+            half_size = world_size / 2
+            
+            # For square world, check if agent is outside the boundaries
+            if isinstance(self.world, SquareContinuousWorld):
+                # Check if agent is outside the square boundaries
+                if (agent_pos[0] <= 0 or agent_pos[0] >= world_size or 
+                    agent_pos[1] <= 0 or agent_pos[1] >= world_size):
+                    crashed = True
+                    collision_types[idx] = CollisionType.BORDER
+            
+            # Check for collisions with blocks (obstacles)
+            for block_pos, block_radius in self.world.blocks:
+                dist = np.linalg.norm(np.array(block_pos) - agent_pos)
+                if dist <= (block_radius + self.vehicle_collision_dist):
+                    crashed = True
+                    collision_types[idx] = CollisionType.BLOCK
+                    break
+            
+            # Check for collisions with interior walls
+            for wall in self.world.interior_walls:
+                # Calculate distance from point to line segment
+                p1, p2 = np.array(wall[0]), np.array(wall[1])
+                line_vec = p2 - p1
+                line_len = np.linalg.norm(line_vec)
+                line_unitvec = line_vec / line_len
+                p1_to_agent = agent_pos - p1
+                p1_to_agent_scaled = np.dot(p1_to_agent, line_unitvec)
+                
+                # Get the closest point on the line segment
+                if p1_to_agent_scaled < 0:
+                    closest_point = p1
+                elif p1_to_agent_scaled > line_len:
+                    closest_point = p2
+                else:
+                    closest_point = p1 + line_unitvec * p1_to_agent_scaled
+                
+                # Calculate distance from agent to closest point
+                dist = np.linalg.norm(agent_pos - closest_point)
+                
+                # Check if distance is less than collision threshold
+                if dist <= self.vehicle_collision_dist:
+                    crashed = True
+                    collision_types[idx] = CollisionType.INTERIOR_WALL
+                    break
+            
             crashed = crashed or bool(state_i.status[1])
 
             min_dest_dist = min(
