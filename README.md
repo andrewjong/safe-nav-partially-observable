@@ -5,9 +5,9 @@ Install the conda environment using the provided `environment.yml` file. This wi
 conda env create -f environment.yml
 ```
 
-Then install the local racecar_gym package using pip:
+Then install the local environment package using pip:
 ```bash
-cd racecar_gym/
+cd posggym-main/
 pip install -e .
 ```
 
