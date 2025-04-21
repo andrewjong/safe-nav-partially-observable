@@ -502,11 +502,45 @@ def main():
 
         # compute a nominal action via MPPI
         nom_controller.set_odom((vehicle_x, vehicle_y), vehicle_angle)
-        action = nom_controller.get_command().cpu().numpy()
+        mppi_action = nom_controller.get_command().cpu().numpy()
         
         # Get and visualize MPPI trajectories
         sampled_trajectories = nom_controller.get_sampled_trajectories()
         chosen_trajectory = nom_controller.get_chosen_trajectory()
+        
+        # Debug prints
+        print(f"MPPI action (linear_vel, angular_vel): {mppi_action}")
+        
+        # Convert MPPI action to environment action format
+        # MPPI: [linear_vel, angular_vel]
+        # Env: [dyaw, dvel]
+        # 
+        # For dyaw, we can use the angular velocity directly (dt=0.1 is assumed in the environment)
+        # For dvel, we need to convert from absolute velocity to change in velocity
+        # We'll use the current velocity from the observation
+        current_vel = np.linalg.norm(observations["0"][3:5])  # Get current velocity magnitude
+        dvel = mppi_action[0] - current_vel  # Change in velocity
+        
+        # Create the environment action
+        action = np.array([mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
+        
+        print(f"Current velocity: {current_vel}")
+        print(f"Converted env action (dyaw, dvel): {action}")
+        
+        if chosen_trajectory is not None and len(chosen_trajectory) > 1:
+            # Calculate direction vector from current position to next position in trajectory
+            current_pos = chosen_trajectory[0][:2].cpu().numpy()
+            next_pos = chosen_trajectory[1][:2].cpu().numpy()
+            traj_direction = next_pos - current_pos
+            traj_angle = np.arctan2(traj_direction[1], traj_direction[0])
+            print(f"Trajectory direction: {traj_direction}, angle: {traj_angle}")
+            print(f"Current angle: {vehicle_angle}")
+            
+            # Calculate expected velocity based on trajectory
+            expected_linear_vel = np.linalg.norm(traj_direction) / nom_controller.dt
+            expected_angular_vel = (chosen_trajectory[1][2].item() - chosen_trajectory[0][2].item()) / nom_controller.dt
+            print(f"Expected velocities - linear: {expected_linear_vel}, angular: {expected_angular_vel}")
+        
         occupancy_map.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory)
 
         # # now compute HJ reachability
