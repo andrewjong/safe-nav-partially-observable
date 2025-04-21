@@ -94,11 +94,13 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
     | :-------------------: | :----------------------------------: | :-------: |
     | 0                     | Wall distance                        | [0, d]    |
     | n_sensors             | Other vehicle distance               | [0, d]    |
-    | 2 * n_sensors         | Vehicle angle                        | [-2π, 2π] |
-    | 2 * n_sensors + 1     | Vehicle x velocity                   | [-1, 1]   |
-    | 2 * n_sensors + 2     | Vehicle y velocity                   | [-1, 1]   |
-    | 2 * n_sensors + 3     | distance to destination along x axis | [0, s]    |
-    | 2 * n_sensors + 4     | distance to destination along y axis | [0, s]    |
+    | 2 * n_sensors         | Vehicle x                            | [0, d]    |
+    | 2 * n_sensors + 1     | Vehicle y                            | [0, d]    |
+    | 2 * n_sensors + 2     | Vehicle angle                        | [-2π, 2π] |
+    | 2 * n_sensors + 3     | Vehicle x velocity                   | [-1, 1]   |
+    | 2 * n_sensors + 4     | Vehicle y velocity                   | [-1, 1]   |
+    | 2 * n_sensors + 5     | distance to destination along x axis | [0, s]    |
+    | 2 * n_sensors + 6     | distance to destination along y axis | [0, s]    |
 
     Where `d = obs_dist` and `s = world.size`
 
@@ -171,6 +173,8 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
     | `14x14Blocks`     | 4                    | 14x14      |
     | `14x14CrissCross` | 8                    | 14x14      |
     | `14x14RoundAbout` | 4                    | 14x14      |
+    | `30x30Empty`      | 1                    | 30x30      |
+    | `30x30ScatteredObstacleField` | 1        | 30x30      |
 
 
     For example to use the DrivingContinuous environment with the `7x7RoundAbout`
