@@ -211,10 +211,11 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
         num_agents: int = 2,
         obs_dist: float = 5.0,
         n_sensors: int = 16,
+        fov: float = 2 * np.pi,  # Default to full 360-degree field of view
         render_mode: Optional[str] = None,
     ):
         super().__init__(
-            DrivingContinuousModel(world, num_agents, obs_dist, n_sensors),
+            DrivingContinuousModel(world, num_agents, obs_dist, n_sensors, fov),
             render_mode=render_mode,
         )
         self.window_surface = None
@@ -390,7 +391,9 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
         num_agents: int,
         obs_dist: float,
         n_sensors: int,
+        fov: float = 2 * np.pi,
     ):
+        assert 0 < fov <= 2 * np.pi, "fov must be in (0, 2 * pi]"
         if isinstance(world, str):
             assert world in SUPPORTED_WORLDS, (
                 f"Unsupported world '{world}'. If world argument is a string it must "
@@ -409,6 +412,9 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
         self.world = world
         self.n_sensors = n_sensors
         self.obs_dist = obs_dist
+        self.fov = fov
+        # Calculate angle bounds based on fov
+        self.angle_bounds = (-self.fov / 2, self.fov / 2)
         self.vehicle_collision_dist = 2.1 * self.world.agent_radius
 
         self.possible_agents = tuple(str(i) for i in range(num_agents))
@@ -659,6 +665,7 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
             include_blocks=True,
             check_walls=True,
             use_relative_angle=True,
+            angle_bounds=self.angle_bounds,
         )
 
         obs = np.full((self.obs_dim,), self.obs_dist, dtype=np.float32)

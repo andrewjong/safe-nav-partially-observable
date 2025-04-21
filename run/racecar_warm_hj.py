@@ -156,8 +156,16 @@ class OccupancyMap:
         # Number of lidar beams
         self.n_sensors = len(lidar_distances)
         
+        # Get FOV from environment (assuming it's passed from the environment)
+        # Default to full 360 degrees if not specified
+        fov = getattr(env.model, 'fov', 2 * math.pi)
+        
+        # Calculate angle bounds
+        angle_min = -fov / 2
+        angle_max = fov / 2
+        
         # Angle between consecutive lidar beams
-        angle_inc = 2 * math.pi / self.n_sensors
+        angle_inc = fov / self.n_sensors
         
         # Process each lidar beam
         for i, distance in enumerate(lidar_distances):
@@ -165,7 +173,8 @@ class OccupancyMap:
             current_debug = debug and (i % 4 == 0)
             
             # Calculate beam angle in world frame
-            beam_angle = vehicle_angle + i * angle_inc
+            # Map i from [0, n_sensors-1] to [angle_min, angle_max]
+            beam_angle = vehicle_angle + angle_min + i * angle_inc
             
             # Normalize angle to [0, 2*pi)
             beam_angle = beam_angle % (2 * math.pi)
@@ -324,15 +333,28 @@ class OccupancyMap:
                 
                 # Draw lidar lines for visualization
                 if self.last_robot_angle is not None:
-                    angle_inc = 2 * math.pi / self.n_sensors
+                    # Get FOV from environment
+                    fov = getattr(env.model, 'fov', 2 * math.pi)
                     
+                    # Calculate angle bounds
+                    angle_min = -fov / 2
+                    angle_max = fov / 2
+                    
+                    # Angle between consecutive lidar beams
+                    angle_inc = fov / self.n_sensors
+                    
+                    # Draw FOV boundary lines
                     for i in range(self.n_sensors):
-                        beam_angle = self.last_robot_angle + i * angle_inc
+                        # Map i from [0, n_sensors-1] to [angle_min, angle_max]
+                        beam_angle = self.last_robot_angle + angle_min + i * angle_inc
                         end_x = self.last_robot_pos[0] + MAX_SENSOR_DISTANCE * math.cos(beam_angle)
                         end_y = self.last_robot_pos[1] + MAX_SENSOR_DISTANCE * math.sin(beam_angle)
                         
                         end_row, end_col = self.world_to_grid(end_x, end_y)
-                        line = self.ax.plot([robot_col, end_col], [robot_row, end_row], 'r-', alpha=0.3)[0]
+                        # Draw FOV boundary lines in red, other lines in light red
+                        alpha = 0.7 if i == 0 or i == self.n_sensors - 1 else 0.2
+                        line_width = 1.5 if i == 0 or i == self.n_sensors - 1 else 0.5
+                        line = self.ax.plot([robot_col, end_col], [robot_row, end_row], 'r-', alpha=alpha, linewidth=line_width)[0]
                         self.lidar_lines.append(line)
             
             # Update grid lines to ensure they're visible
@@ -472,11 +494,17 @@ class OccupancyMap:
 
 def main():
 
-    env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    # Define field of view (FOV) - the total angle range for observations
+    # FOV = 2*np.pi  # Full 360-degree view
+    # FOV = np.pi    # 180-degree view (front half)
+    FOV = np.pi      # 180-degree view centered at the front of the agent
+    # FOV = np.pi/2  # 90-degree view centered at the front of the agent
+    env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, 
+                      obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 
     global MAP_WIDTH, MAP_HEIGHT
     MAP_WIDTH = env.model.state_space[0][0].high[0]
