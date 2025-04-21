@@ -515,6 +515,26 @@ class Navigator:
             trajectories = self.planner.states
             M, K, T, nx = trajectories.shape
             return trajectories.view(M * K, T, nx)
+            
+    def get_chosen_trajectory(self):
+        """
+        Get the chosen trajectory based on the current control sequence.
+        
+        Returns:
+            torch.Tensor: Tensor of shape (T, nx) containing the chosen trajectory
+        """
+        if self.planner_type == "mppi":
+            # Start with current state
+            state = self._odom_torch.clone().unsqueeze(0)  # Shape: (1, nx)
+            trajectory = [state.squeeze(0)]
+            
+            # Roll out the trajectory using the current control sequence
+            for t in range(self.planner.T):
+                action = self.planner.U[t].unsqueeze(0)  # Shape: (1, nu)
+                state = dubins_dynamics_tensor(state, action, self.dt)
+                trajectory.append(state.squeeze(0))
+                
+            return torch.stack(trajectory)
 
     def make_mppi_config(self):
         mppi_config = {}

@@ -4,8 +4,9 @@ from matplotlib.patches import Circle
 import math
 
 import posggym
-from reachability.warm_start_solver import (WarmStartSolver,
-                                            WarmStartSolverConfig)
+# Comment out reachability import since we're focusing on MPPI visualization
+# from reachability.warm_start_solver import (WarmStartSolver,
+#                                             WarmStartSolverConfig)
 from src.mppi import Navigator, dubins_dynamics_tensor
 
 
@@ -71,6 +72,8 @@ class OccupancyMap:
         self.map_img = None
         self.robot_marker = None
         self.lidar_lines = []
+        self.mppi_trajectory_lines = []
+        self.chosen_trajectory_line = None
         
         # Last known robot position for visualization
         self.last_robot_pos = None
@@ -318,27 +321,83 @@ class OccupancyMap:
     def plot(self):
         """Plot the occupancy map."""
         self.update_plot()
+        
+    def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None):
+        """
+        Visualize the MPPI sampled trajectories and the chosen trajectory.
+        
+        Args:
+            trajectories (torch.Tensor): Tensor of shape (M*K, T, nx) containing sampled trajectories
+            chosen_trajectory (torch.Tensor, optional): Tensor of shape (T, nx) containing the chosen trajectory
+        """
+        if self.fig is None:
+            self.initialize_plot()
+            
+        # Clear previous trajectory lines
+        for line in self.mppi_trajectory_lines:
+            line.remove()
+        self.mppi_trajectory_lines = []
+        
+        if self.chosen_trajectory_line is not None:
+            self.chosen_trajectory_line.remove()
+            self.chosen_trajectory_line = None
+            
+        # Convert trajectories to numpy for plotting
+        if trajectories is not None:
+            trajectories_np = trajectories.detach().cpu().numpy()
+            num_trajectories = trajectories_np.shape[0]
+            
+            # Plot a subset of trajectories to avoid cluttering the plot
+            max_trajectories_to_plot = min(50, num_trajectories)
+            step = max(1, num_trajectories // max_trajectories_to_plot)
+            
+            for i in range(0, num_trajectories, step):
+                traj = trajectories_np[i]
+                # Convert world coordinates to grid coordinates for plotting
+                traj_rows, traj_cols = [], []
+                for j in range(traj.shape[0]):
+                    row, col = self.world_to_grid(traj[j, 0], traj[j, 1])
+                    traj_rows.append(row)
+                    traj_cols.append(col)
+                
+                # Plot the trajectory with low alpha to show density
+                line = self.ax.plot(traj_cols, traj_rows, 'b-', alpha=0.1, linewidth=1)[0]
+                self.mppi_trajectory_lines.append(line)
+        
+        # Plot the chosen trajectory with a different color and higher alpha
+        if chosen_trajectory is not None:
+            chosen_traj_np = chosen_trajectory.detach().cpu().numpy()
+            chosen_rows, chosen_cols = [], []
+            
+            for j in range(chosen_traj_np.shape[0]):
+                row, col = self.world_to_grid(chosen_traj_np[j, 0], chosen_traj_np[j, 1])
+                chosen_rows.append(row)
+                chosen_cols.append(col)
+            
+            self.chosen_trajectory_line = self.ax.plot(chosen_cols, chosen_rows, 'g-', alpha=0.8, linewidth=2)[0]
+            
+        self.fig.canvas.draw()
+        plt.pause(0.001)
 
 
 def main():
 
-    env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
     env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
 
-
-
-    solver = WarmStartSolver(
-        config=WarmStartSolverConfig(
-            system_name="dubins3d",
-            domain_cells=[MAP_WIDTH * MAP_RESOLUTION, MAP_HEIGHT * MAP_RESOLUTION, 40],
-            domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2*np.pi]],
-            mode="brt",
-            accuracy="medium",
-            converged_values=None,
-            until_convergent=False,
-            print_progress=False,
-        )
-    )
+    # Comment out WarmStartSolver since we're focusing on MPPI visualization
+    # solver = WarmStartSolver(
+    #     config=WarmStartSolverConfig(
+    #         system_name="dubins3d",
+    #         domain_cells=[MAP_WIDTH * MAP_RESOLUTION, MAP_HEIGHT * MAP_RESOLUTION, 40],
+    #         domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2*np.pi]],
+    #         mode="brt",
+    #         accuracy="medium",
+    #         converged_values=None,
+    #         until_convergent=False,
+    #         print_progress=False,
+    #     )
+    # )
 
 
     occupancy_map = OccupancyMap(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
@@ -377,7 +436,11 @@ def main():
         # compute a nominal action via MPPI
         nom_controller.set_odom((vehicle_x, vehicle_y), vehicle_angle)
         action = nom_controller.get_command().cpu().numpy()
-
+        
+        # Get and visualize MPPI trajectories
+        sampled_trajectories = nom_controller.get_sampled_trajectories()
+        chosen_trajectory = nom_controller.get_chosen_trajectory()
+        occupancy_map.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory)
 
         # # now compute HJ reachability
         # values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
