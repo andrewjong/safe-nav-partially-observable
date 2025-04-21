@@ -484,9 +484,10 @@ def main():
         lidar_distances = observation[0:N_SENSORS]
         vehicle_x = observation[2 * N_SENSORS]
         vehicle_y = observation[2 * N_SENSORS + 1]
-        vehicle_angle = observation[2*N_SENSORS + 2]
-        vehicle_x_velocity = observation[2*N_SENSORS + 3]
-        vehicle_y_velocity = observation[2*N_SENSORS + 4]
+        vehicle_angle = observation[2 * N_SENSORS + 2]
+        vehicle_x_velocity = observation[2 * N_SENSORS + 3]
+        vehicle_y_velocity = observation[2 * N_SENSORS + 4]
+        # Note: goal distance is now at indices 2*N_SENSORS + 5 and 2*N_SENSORS + 6
         env.render()
 
 

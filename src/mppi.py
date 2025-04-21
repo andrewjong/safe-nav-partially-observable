@@ -550,23 +550,24 @@ class Navigator:
         mppi_config["nx"] = 3  # [x, y, theta]
         mppi_config["dt"] = self.dt
         # Adjust noise sigma to have different values for linear and angular velocity
-        mppi_config["noise_sigma"] = torch.diag(torch.tensor([0.5, 1.0], dtype=self.dtype, device=self.device))
-        mppi_config["num_samples"] = 200
-        mppi_config["horizon"] = 20
+        # Reduce noise for linear velocity to make it more stable
+        mppi_config["noise_sigma"] = torch.diag(torch.tensor([0.3, 0.8], dtype=self.dtype, device=self.device))
+        mppi_config["num_samples"] = 300  # Increase samples for better exploration
+        mppi_config["horizon"] = 25  # Increase horizon for better planning
         mppi_config["device"] = self.device
         # First element is linear velocity, second is angular velocity
-        # Limit linear velocity to a reasonable range (0 to 3)
-        # Limit angular velocity to a reasonable range (-2 to 2)
-        mppi_config["u_min"] = torch.tensor([0.0, -2.0], dtype=self.dtype, device=self.device)
-        mppi_config["u_max"] = torch.tensor([3.0, 2.0], dtype=self.dtype, device=self.device)
+        # Limit linear velocity to a reasonable range (0.5 to 3.0) - enforce minimum positive velocity
+        # Limit angular velocity to a reasonable range (-1.5 to 1.5) - reduce max angular velocity
+        mppi_config["u_min"] = torch.tensor([0.5, -1.5], dtype=self.dtype, device=self.device)
+        mppi_config["u_max"] = torch.tensor([3.0, 1.5], dtype=self.dtype, device=self.device)
         mppi_config["lambda_"] = 1
         mppi_config["rollout_samples"] = 1
         mppi_config["terminal_state_cost"] = self.mppi_terminal_state_cost_funct
-        mppi_config["rollout_var_cost"] = 0.1  # Increase from 0
-        mppi_config["rollout_var_discount"] = 0.9  # Adjust from 0.95
-        # Initialize with a small positive linear velocity and zero angular velocity
+        mppi_config["rollout_var_cost"] = 0.1
+        mppi_config["rollout_var_discount"] = 0.9
+        # Initialize with a moderate positive linear velocity and zero angular velocity
         mppi_config["u_init"] = torch.tensor(
-            [1.0, 0.0], dtype=self.dtype, device=self.device
+            [1.5, 0.0], dtype=self.dtype, device=self.device
         )
         mppi_config["u_per_command"] = 1
 
@@ -645,8 +646,13 @@ class Navigator:
         collision_cost = self._compute_collision_cost(current_state, action)
         
         # Penalize large changes in linear velocity to reduce oscillations
-        # Prefer constant linear velocity (close to 1.0)
-        linear_vel_cost = torch.abs(action[:, 0] - 1.0)
+        # Prefer constant positive linear velocity (close to 1.5)
+        # Heavily penalize negative or zero linear velocity to prevent backwards motion
+        linear_vel_cost = torch.where(
+            action[:, 0] < 0.5,
+            10.0 * (0.5 - action[:, 0]),  # Heavy penalty for low/negative velocity
+            torch.abs(action[:, 0] - 1.5)  # Prefer velocity around 1.5
+        )
         
         # Penalize large angular velocities to encourage smoother paths
         angular_vel_cost = torch.abs(action[:, 1])
@@ -669,11 +675,25 @@ class Navigator:
         For terminal states, we want to:
         1. Heavily penalize distance to goal
         2. Heavily penalize collisions
-        3. Lightly penalize velocity (we care more about reaching the goal safely)
+        3. Strongly encourage forward motion
+        4. Lightly penalize angular velocity (we care more about reaching the goal safely)
         """
-        # Use higher weight for distance to goal in terminal states
-        terminal_weights = (2.0, 10.0, 0.1, 0.1)
-        return self.mppi_cost_func(states, actions, 1, weights=terminal_weights)
+        # Use higher weight for distance to goal and forward motion in terminal states
+        # weights: (dist_goal, collision, linear_vel, angular_vel)
+        terminal_weights = (3.0, 15.0, 1.0, 0.1)
+        
+        # Get the base cost using our cost function
+        cost = self.mppi_cost_func(states, actions, 1, weights=terminal_weights)
+        
+        # Add an extra penalty for trajectories that end with low forward velocity
+        # This helps prevent the agent from stopping or moving backwards
+        low_vel_penalty = torch.where(
+            actions[:, 0] < 1.0,
+            5.0 * (1.0 - actions[:, 0]),
+            0.0
+        )
+        
+        return cost + low_vel_penalty
 
 
 if __name__ == "__main__":
