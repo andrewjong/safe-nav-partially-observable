@@ -682,7 +682,8 @@ def main():
         observations["0"][2 * N_SENSORS + 2],
     )
 
-    nom_controller = Navigator()
+    # Initialize Navigator with the agent radius from the environment
+    nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
     # Pass the actual grid dimensions, not the world dimensions
     grid_dimensions = [occupancy_map.grid_height, occupancy_map.grid_width]
 

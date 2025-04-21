@@ -452,12 +452,13 @@ class MPPI:
 
 
 class Navigator:
-    def __init__(self, planner_type="mppi", device="cpu", dtype=torch.float32, dt=0.1):
+    def __init__(self, planner_type="mppi", device="cpu", dtype=torch.float32, dt=0.1, robot_radius=0.0):
 
         self.device = device
         self.dtype = dtype
         self.dt = dt
         self.planner_type = planner_type
+        self.robot_radius = robot_radius  # Add robot radius parameter
 
         self._odom_torch = None
         self.planner = self._start_planner()
@@ -631,6 +632,63 @@ class Navigator:
 
         # Out of bound cost
         collisions[is_out_of_bound] = 1.0
+        
+        # If robot radius is greater than 0, check for collisions within the radius
+        if self.robot_radius > 0:
+            # Convert robot radius to grid cells
+            radius_cells = int(np.ceil(self.robot_radius / self._cell_size))
+            
+            if radius_cells > 0:
+                # Create a batch of positions to check around each point
+                batch_size = current_state.shape[0]
+                
+                # Check for collisions in a square around each position
+                for dx in range(-radius_cells, radius_cells + 1):
+                    for dy in range(-radius_cells, radius_cells + 1):
+                        # Skip if this is the center point (already checked)
+                        if dx == 0 and dy == 0:
+                            continue
+                            
+                        # Skip points outside the circle defined by robot_radius
+                        if dx**2 + dy**2 > radius_cells**2:
+                            continue
+                            
+                        # Calculate new positions
+                        new_pos_x = position_map[..., 0] + dx
+                        new_pos_y = position_map[..., 1] + dy
+                        
+                        # Check bounds for new positions
+                        is_valid = torch.logical_and(
+                            torch.logical_and(
+                                new_pos_x >= 0,
+                                new_pos_x < self._map_torch.shape[1]
+                            ),
+                            torch.logical_and(
+                                new_pos_y >= 0,
+                                new_pos_y < self._map_torch.shape[0]
+                            )
+                        )
+                        
+                        # Only check valid positions
+                        if torch.any(is_valid):
+                            # Clamp positions to be within bounds
+                            new_pos_x = torch.clamp(new_pos_x, 0, self._map_torch.shape[1] - 1)
+                            new_pos_y = torch.clamp(new_pos_y, 0, self._map_torch.shape[0] - 1)
+                            
+                            # Check for collisions at the new positions
+                            new_collisions = self._map_torch[new_pos_y, new_pos_x]
+                            
+                            # Convert map values to collision costs
+                            new_collisions = torch.where(
+                                new_collisions == -1, torch.tensor(0.0, device=self.device), new_collisions.float()
+                            )
+                            new_collisions = torch.where(
+                                new_collisions == 100, torch.tensor(1.0, device=self.device), new_collisions.float()
+                            )
+                            
+                            # Update collisions with the maximum value (1.0 if any collision is detected)
+                            collisions = torch.maximum(collisions, new_collisions)
+        
         return collisions
 
     def mppi_cost_func(
