@@ -324,7 +324,7 @@ class OccupancyMap:
         
     def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None):
         """
-        Visualize the MPPI sampled trajectories and the chosen trajectory.
+        Visualize the MPPI sampled trajectories and the chosen trajectory in continuous space.
         
         Args:
             trajectories (torch.Tensor): Tensor of shape (M*K, T, nx) containing sampled trajectories
@@ -333,16 +333,70 @@ class OccupancyMap:
         if self.fig is None:
             self.initialize_plot()
             
-        # Clear previous trajectory lines
-        for line in self.mppi_trajectory_lines:
-            line.remove()
-        self.mppi_trajectory_lines = []
-        
-        if self.chosen_trajectory_line is not None:
-            self.chosen_trajectory_line.remove()
-            self.chosen_trajectory_line = None
+        # Create a separate figure for continuous space visualization
+        if not hasattr(self, 'continuous_fig') or self.continuous_fig is None:
+            self.continuous_fig, self.continuous_ax = plt.subplots(figsize=(8, 8))
+            plt.ion()  # Enable interactive mode
+            self.continuous_ax.set_xlabel('X (world units)')
+            self.continuous_ax.set_ylabel('Y (world units)')
+            self.continuous_ax.set_title('MPPI Trajectories (Continuous Space)')
+            self.continuous_ax.set_xlim(0, self.width)
+            self.continuous_ax.set_ylim(0, self.height)
+            self.continuous_ax.grid(True)
             
-        # Convert trajectories to numpy for plotting
+            # Add a colorbar for the occupancy map
+            self.continuous_occupancy_img = self.continuous_ax.imshow(
+                self.grid, 
+                cmap=plt.cm.colors.ListedColormap(['gray', 'white', 'black']),
+                norm=plt.cm.colors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5], 3),
+                origin='upper',
+                extent=[0, self.width, self.height, 0],
+                alpha=0.3  # Make it semi-transparent
+            )
+            
+            # Initialize empty lists for trajectory lines
+            self.continuous_mppi_lines = []
+            self.continuous_chosen_line = None
+            self.continuous_robot_marker = None
+            
+        # Clear previous trajectory lines in continuous space
+        for line in self.continuous_mppi_lines:
+            line.remove()
+        self.continuous_mppi_lines = []
+        
+        if self.continuous_chosen_line is not None:
+            self.continuous_chosen_line.remove()
+            self.continuous_chosen_line = None
+            
+        # Update the occupancy map in the continuous space visualization
+        self.continuous_occupancy_img.set_data(self.grid)
+        
+        # Update robot position in continuous space
+        if self.last_robot_pos is not None:
+            if self.continuous_robot_marker is None:
+                self.continuous_robot_marker = self.continuous_ax.plot(
+                    [self.last_robot_pos[0]], [self.last_robot_pos[1]], 
+                    'ro', markersize=10, label='Robot Position'
+                )[0]
+            else:
+                self.continuous_robot_marker.set_data(
+                    [self.last_robot_pos[0]], [self.last_robot_pos[1]]
+                )
+                
+            # Draw robot orientation as an arrow
+            if hasattr(self, 'continuous_orientation_arrow') and self.continuous_orientation_arrow is not None:
+                self.continuous_orientation_arrow.remove()
+                
+            if self.last_robot_angle is not None:
+                arrow_length = 1.0  # Length of the orientation arrow
+                dx = arrow_length * math.cos(self.last_robot_angle)
+                dy = arrow_length * math.sin(self.last_robot_angle)
+                self.continuous_orientation_arrow = self.continuous_ax.arrow(
+                    self.last_robot_pos[0], self.last_robot_pos[1], dx, dy,
+                    head_width=0.3, head_length=0.5, fc='r', ec='r'
+                )
+            
+        # Convert trajectories to numpy for plotting in continuous space
         if trajectories is not None:
             trajectories_np = trajectories.detach().cpu().numpy()
             num_trajectories = trajectories_np.shape[0]
@@ -353,31 +407,43 @@ class OccupancyMap:
             
             for i in range(0, num_trajectories, step):
                 traj = trajectories_np[i]
-                # Convert world coordinates to grid coordinates for plotting
-                traj_rows, traj_cols = [], []
-                for j in range(traj.shape[0]):
-                    row, col = self.world_to_grid(traj[j, 0], traj[j, 1])
-                    traj_rows.append(row)
-                    traj_cols.append(col)
+                # Extract x and y coordinates directly (no grid conversion)
+                traj_x = traj[:, 0]
+                traj_y = traj[:, 1]
                 
                 # Plot the trajectory with low alpha to show density
-                line = self.ax.plot(traj_cols, traj_rows, 'b-', alpha=0.1, linewidth=1)[0]
-                self.mppi_trajectory_lines.append(line)
+                line = self.continuous_ax.plot(traj_x, traj_y, 'b-', alpha=0.1, linewidth=1)[0]
+                self.continuous_mppi_lines.append(line)
         
         # Plot the chosen trajectory with a different color and higher alpha
         if chosen_trajectory is not None:
             chosen_traj_np = chosen_trajectory.detach().cpu().numpy()
-            chosen_rows, chosen_cols = [], []
+            chosen_x = chosen_traj_np[:, 0]
+            chosen_y = chosen_traj_np[:, 1]
             
-            for j in range(chosen_traj_np.shape[0]):
-                row, col = self.world_to_grid(chosen_traj_np[j, 0], chosen_traj_np[j, 1])
-                chosen_rows.append(row)
-                chosen_cols.append(col)
+            self.continuous_chosen_line = self.continuous_ax.plot(
+                chosen_x, chosen_y, 'g-', alpha=0.8, linewidth=2, label='Chosen Trajectory'
+            )[0]
             
-            self.chosen_trajectory_line = self.ax.plot(chosen_cols, chosen_rows, 'g-', alpha=0.8, linewidth=2)[0]
+            # Add goal marker
+            if hasattr(self, 'goal_marker') and self.goal_marker is not None:
+                self.goal_marker.remove()
+                
+            self.goal_marker = self.continuous_ax.plot(
+                [ROBOT_GOAL[0]], [ROBOT_GOAL[1]], 
+                'g*', markersize=15, label='Goal'
+            )[0]
             
-        self.fig.canvas.draw()
+        # Add legend
+        if not hasattr(self, 'legend_added') or not self.legend_added:
+            self.continuous_ax.legend()
+            self.legend_added = True
+            
+        self.continuous_fig.canvas.draw()
         plt.pause(0.001)
+        
+        # Also update the original grid visualization
+        self.update_plot()
 
 
 def main():
