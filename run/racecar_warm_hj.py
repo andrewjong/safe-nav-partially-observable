@@ -436,16 +436,13 @@ class OccupancyMap:
             trajectories (torch.Tensor): Tensor of shape (M*K, T, nx) containing sampled trajectories
             chosen_trajectory (torch.Tensor, optional): Tensor of shape (T, nx) containing the chosen trajectory
         """
-        if self.fig is None:
-            self.initialize_plot()
-
-        # Create a separate figure for continuous space visualization
+        # Create figure for visualization with occupancy map and MPPI trajectories
         if not hasattr(self, "continuous_fig") or self.continuous_fig is None:
             self.continuous_fig, self.continuous_ax = plt.subplots(figsize=(8, 8))
             plt.ion()  # Enable interactive mode
             self.continuous_ax.set_xlabel("X (world units)")
             self.continuous_ax.set_ylabel("Y (world units)")
-            self.continuous_ax.set_title("MPPI Trajectories (Continuous Space)")
+            self.continuous_ax.set_title("Occupancy Map with MPPI Trajectories")
             self.continuous_ax.set_xlim(0, self.width)
             self.continuous_ax.set_ylim(
                 self.height, 0
@@ -568,9 +565,8 @@ class OccupancyMap:
 
         self.continuous_fig.canvas.draw()
         plt.pause(0.001)
-
-        # Also update the original grid visualization
-        self.update_plot()
+        
+        # Removed call to update_plot() - we're only using the MPPI visualization
 
 
 def main():
@@ -633,7 +629,7 @@ def main():
         occupancy_map.update_from_lidar(
             lidar_distances, vehicle_x, vehicle_y, vehicle_angle
         )
-        occupancy_map.update_plot()  # Update the plot with new data
+        # Removed redundant update_plot() call - we'll only use the MPPI visualization
 
         fail_set = occupancy_map.grid != occupancy_map.FREE
 
