@@ -472,15 +472,21 @@ class OccupancyMap:
 
 def main():
 
-    env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
     # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+
+    global MAP_WIDTH, MAP_HEIGHT
+    MAP_WIDTH = env.model.state_space[0][0].high[0]
+    MAP_HEIGHT = env.model.state_space[0][0].high[1]
 
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
     solver = WarmStartSolver(
         config=WarmStartSolverConfig(
             system_name="dubins3d",
-            domain_cells=[int(MAP_WIDTH * MAP_RESOLUTION), int(MAP_HEIGHT * MAP_RESOLUTION), 40],
+            domain_cells=[int(MAP_WIDTH * MAP_RESOLUTION), int(MAP_HEIGHT * MAP_RESOLUTION), 30],
             domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2*np.pi]],
             mode="brt",
             accuracy="medium",
@@ -500,18 +506,6 @@ def main():
     # Pass the actual grid dimensions, not the world dimensions
     grid_dimensions = [occupancy_map.grid_height, occupancy_map.grid_width]
     
-    # Scale the origin and goal based on the resolution
-    # The MPPI controller expects these in grid coordinates, not world coordinates
-    scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
-    global robot_goal
-    robot_goal = env.state[0].dest_coord
-    scaled_goal = [robot_goal[0] / MAP_RESOLUTION, robot_goal[1] / MAP_RESOLUTION]
-    
-    nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, grid_dimensions, scaled_origin, MAP_RESOLUTION)
-    nom_controller.set_goal(scaled_goal)
-
-    # creates a failure map with the given width, height and resolution.
-    # unobserved cells are initialized as fail set.
 
     for _ in range(3000):
         observation = observations["0"]
@@ -540,6 +534,14 @@ def main():
         fail_set = occupancy_map.grid != occupancy_map.FREE
 
         # compute a nominal action via MPPI
+
+        # Scale the origin and goal based on the resolution
+        # The MPPI controller expects these in grid coordinates, not world coordinates
+        scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
+        global robot_goal
+        robot_goal = env.state[0].dest_coord
+        scaled_goal = [robot_goal[0] / MAP_RESOLUTION, robot_goal[1] / MAP_RESOLUTION]
+        nom_controller.set_goal(scaled_goal)
         nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, grid_dimensions, scaled_origin, MAP_RESOLUTION)
         nom_controller.set_odom((vehicle_x, vehicle_y), vehicle_angle)
         mppi_action = nom_controller.get_command().cpu().numpy()
