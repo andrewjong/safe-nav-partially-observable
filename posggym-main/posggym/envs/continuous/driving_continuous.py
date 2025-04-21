@@ -417,7 +417,8 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
     """
 
     R_STEP_COST = 0.00
-    R_CRASH_VEHICLE = -1.0
+    R_CRASH_VEHICLE = -2.0
+    R_CRASH_OBSTACLE = -1.0
     R_DESTINATION_REACHED = 1.0
     R_PROGRESS = 0.05
 
@@ -785,8 +786,11 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
                 # already in terminal/rewarded state
                 r_i = 0.0
             elif collision_types[idx] == CollisionType.AGENT:
-                # Treat as if crashed into a vehicle
+                # Crashed into a vehicle
                 r_i = self.R_CRASH_VEHICLE
+            elif collision_types[idx] in [CollisionType.BLOCK, CollisionType.BORDER, CollisionType.INTERIOR_WALL]:
+                # Crashed into an obstacle (block, border, or interior wall)
+                r_i = self.R_CRASH_OBSTACLE
             elif next_state[idx].status[0]:
                 r_i = self.R_DESTINATION_REACHED
             else:
