@@ -16,6 +16,9 @@ def dubins_dynamics_tensor(
     """
     current_state: shape(num_samples, dim_x)
     action: shape(num_samples, dim_u)
+    
+    action[:, 0] is linear velocity
+    action[:, 1] is angular velocity
 
     Implemented discrete time dynamics with RK-4.
 
@@ -25,9 +28,12 @@ def dubins_dynamics_tensor(
 
     def one_step_dynamics(state, action):
         """Compute the derivatives [dx/dt, dy/dt, dtheta/dt]."""
-        x_dot = 2.0 * torch.cos(state[:, 2])
-        y_dot = 2.0 * torch.sin(state[:, 2])
-        theta_dot = action[:, 0]
+        # Use the first element of action as linear velocity
+        linear_vel = action[:, 0]
+        x_dot = linear_vel * torch.cos(state[:, 2])
+        y_dot = linear_vel * torch.sin(state[:, 2])
+        # Use the second element of action as angular velocity
+        theta_dot = action[:, 1]
         return torch.stack([x_dot, y_dot, theta_dot], dim=1)
 
     # k1
@@ -543,19 +549,24 @@ class Navigator:
         mppi_config["running_cost"] = self.mppi_cost_func
         mppi_config["nx"] = 3  # [x, y, theta]
         mppi_config["dt"] = self.dt
-        mppi_config["noise_sigma"] = torch.eye(2, dtype=self.dtype, device=self.device)
+        # Adjust noise sigma to have different values for linear and angular velocity
+        mppi_config["noise_sigma"] = torch.diag(torch.tensor([0.5, 1.0], dtype=self.dtype, device=self.device))
         mppi_config["num_samples"] = 200
         mppi_config["horizon"] = 20
         mppi_config["device"] = self.device
-        mppi_config["u_min"] = torch.tensor([-5, -4])
-        mppi_config["u_max"] = torch.tensor([5, 4])
+        # First element is linear velocity, second is angular velocity
+        # Limit linear velocity to a reasonable range (0 to 3)
+        # Limit angular velocity to a reasonable range (-2 to 2)
+        mppi_config["u_min"] = torch.tensor([0.0, -2.0], dtype=self.dtype, device=self.device)
+        mppi_config["u_max"] = torch.tensor([3.0, 2.0], dtype=self.dtype, device=self.device)
         mppi_config["lambda_"] = 1
         mppi_config["rollout_samples"] = 1
         mppi_config["terminal_state_cost"] = self.mppi_terminal_state_cost_funct
         mppi_config["rollout_var_cost"] = 0.1  # Increase from 0
         mppi_config["rollout_var_discount"] = 0.9  # Adjust from 0.95
+        # Initialize with a small positive linear velocity and zero angular velocity
         mppi_config["u_init"] = torch.tensor(
-            [0.0, 0.0], dtype=self.dtype, device=self.device
+            [1.0, 0.0], dtype=self.dtype, device=self.device
         )
         mppi_config["u_per_command"] = 1
 
@@ -612,17 +623,40 @@ class Navigator:
         return collisions
 
     def mppi_cost_func(
-        self, current_state: torch.Tensor, action: torch.Tensor, t, weights=(1, 2.5)
+        self, current_state: torch.Tensor, action: torch.Tensor, t, weights=(1.0, 5.0, 0.5, 0.2)
     ) -> torch.Tensor:
         """
         current_state: shape(num_samples, dim_x)
+        action: shape(num_samples, dim_u) where action[:, 0] is linear velocity and action[:, 1] is angular velocity
+        
+        weights: tuple of weights for different cost components
+            weights[0]: weight for distance to goal
+            weights[1]: weight for collision cost
+            weights[2]: weight for linear velocity smoothness
+            weights[3]: weight for angular velocity cost
+            
         return:
         cost: torch.tensor, shape(num_samples, 1)
         """
+        # Distance to goal cost
         dist_goal_cost = torch.norm(current_state[:, :2] - self._goal_torch, dim=1)
+        
+        # Collision cost
         collision_cost = self._compute_collision_cost(current_state, action)
-
-        cost = weights[0] * dist_goal_cost + weights[1] * collision_cost
+        
+        # Penalize large changes in linear velocity to reduce oscillations
+        # Prefer constant linear velocity (close to 1.0)
+        linear_vel_cost = torch.abs(action[:, 0] - 1.0)
+        
+        # Penalize large angular velocities to encourage smoother paths
+        angular_vel_cost = torch.abs(action[:, 1])
+        
+        # Combine all costs with their respective weights
+        cost = (weights[0] * dist_goal_cost + 
+                weights[1] * collision_cost + 
+                weights[2] * linear_vel_cost + 
+                weights[3] * angular_vel_cost)
+        
         return cost
 
     def mppi_terminal_state_cost_funct(
@@ -630,8 +664,16 @@ class Navigator:
     ) -> torch.Tensor:
         """
         states: shape(M*K, T, dim_x)
+        actions: shape(M*K, T, dim_u)
+        
+        For terminal states, we want to:
+        1. Heavily penalize distance to goal
+        2. Heavily penalize collisions
+        3. Lightly penalize velocity (we care more about reaching the goal safely)
         """
-        return self.mppi_cost_func(states, actions, 1)
+        # Use higher weight for distance to goal in terminal states
+        terminal_weights = (2.0, 10.0, 0.1, 0.1)
+        return self.mppi_cost_func(states, actions, 1, weights=terminal_weights)
 
 
 if __name__ == "__main__":
@@ -646,13 +688,33 @@ if __name__ == "__main__":
 
     non_col_x = []
     non_col_y = []
-
+    
+    # For tracking velocity commands
+    linear_vels = []
+    angular_vels = []
+    
+    # For tracking positions
+    positions_x = []
+    positions_y = []
+    
     for i in range(400):
         u = navigator.get_command()
+        # Extract linear and angular velocity for logging
+        linear_vel = u[0].item()
+        angular_vel = u[1].item()
+        linear_vels.append(linear_vel)
+        angular_vels.append(angular_vel)
+        
+        # Simulate dynamics with the command
         state = dubins_dynamics_tensor(state.unsqueeze(0), u.unsqueeze(0), 0.1)
         state = state.squeeze()
         navigator.set_odom(state[:2], state[-1])
+        
+        # Track position
+        positions_x.append(state[0].item())
+        positions_y.append(state[1].item())
 
+        # Check for collisions
         if navigator._compute_collision_cost(state.unsqueeze(0), u.unsqueeze(0)) > 0:
             col_x.append(state[0].item())
             col_y.append(state[1].item())
@@ -660,10 +722,47 @@ if __name__ == "__main__":
             non_col_x.append(state[0].item())
             non_col_y.append(state[1].item())
 
-    command = navigator.get_command()
+    final_command = navigator.get_command()
+    print(f"Final command: Linear velocity = {final_command[0].item()}, Angular velocity = {final_command[1].item()}")
 
-    print(command)
-
-    plt.scatter(col_x, col_y, c="red")
-    plt.scatter(non_col_x, non_col_y, c="green")
+    # Plot trajectory
+    plt.figure(figsize=(10, 8))
+    plt.subplot(2, 2, 1)
+    plt.scatter(col_x, col_y, c="red", label="Collision")
+    plt.scatter(non_col_x, non_col_y, c="green", label="No Collision")
+    plt.scatter([0], [0], c="blue", marker="o", s=100, label="Start")
+    plt.scatter([50], [50], c="purple", marker="*", s=100, label="Goal")
+    plt.title("Robot Trajectory")
+    plt.xlabel("X Position")
+    plt.ylabel("Y Position")
+    plt.legend()
+    plt.grid(True)
+    
+    # Plot linear velocity over time
+    plt.subplot(2, 2, 2)
+    plt.plot(linear_vels)
+    plt.title("Linear Velocity")
+    plt.xlabel("Time Step")
+    plt.ylabel("Velocity")
+    plt.grid(True)
+    
+    # Plot angular velocity over time
+    plt.subplot(2, 2, 3)
+    plt.plot(angular_vels)
+    plt.title("Angular Velocity")
+    plt.xlabel("Time Step")
+    plt.ylabel("Angular Velocity (rad/s)")
+    plt.grid(True)
+    
+    # Plot position over time
+    plt.subplot(2, 2, 4)
+    plt.plot(positions_x, positions_y)
+    plt.scatter([0], [0], c="blue", marker="o", s=100, label="Start")
+    plt.scatter([50], [50], c="purple", marker="*", s=100, label="Goal")
+    plt.title("Position Path")
+    plt.xlabel("X Position")
+    plt.ylabel("Y Position")
+    plt.grid(True)
+    
+    plt.tight_layout()
     plt.show()
