@@ -28,8 +28,9 @@ FOV = np.pi/4  # 45-degree view centered at the front of the agent
 # env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 # env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 # env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+# env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+env = posggym.make('DrivingContinuous-v0', world="30x30OneWall", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 
 class OccupancyMap:
     """
@@ -90,6 +91,25 @@ class OccupancyMap:
         self.last_robot_pos = None
         self.last_robot_angle = None
         self.n_sensors = N_SENSORS
+    
+    def reset(self):
+        """
+        Reset the occupancy map to its initial state.
+        """
+        self.grid.fill(self.UNSEEN)
+        self.last_robot_pos = None
+        self.last_robot_angle = None
+        self.n_sensors = N_SENSORS
+        
+        if self.fig is not None:
+            plt.close(self.fig)
+            self.fig = None
+            self.ax = None
+            self.map_img = None
+            self.robot_marker = None
+            self.lidar_lines = []
+            self.mppi_trajectory_lines = []
+            self.chosen_trajectory_line = None
     
     def world_to_grid(self, x, y):
         """
@@ -630,6 +650,7 @@ def main():
         observations, rewards, terminations, truncations, all_done, infos = env.step(actions)
         if all_done:
             observations, infos = env.reset()
+            occupancy_map.reset()
 
     env.close()
     plt.ioff()  # Turn off interactive mode when done
