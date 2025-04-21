@@ -659,16 +659,16 @@ def main():
         config=WarmStartSolverConfig(
             system_name="dubins3d",
             domain_cells=[
-                int(MAP_WIDTH * MAP_RESOLUTION),
-                int(MAP_HEIGHT * MAP_RESOLUTION),
+                int(MAP_WIDTH / MAP_RESOLUTION),
+                int(MAP_HEIGHT / MAP_RESOLUTION),
                 30,
             ],
             domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2 * np.pi]],
             mode="brt",
             accuracy="medium",
             converged_values=None,
-            until_convergent=False,
-            print_progress=False,
+            until_convergent=True,
+            print_progress=True,
         )
     )
 
@@ -774,16 +774,16 @@ def main():
         )
 
         # # now compute HJ reachability
-        # values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
-        if False and values is not None:
-            safe_action, _, _ = solver.compute_safe_control(
-                np.array([vehicle_x, vehicle_y, vehicle_angle]),
-                action,
-                action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
-                values=values,
-            )
-        else:
-            safe_action = action
+        values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
+        # if values is not None:
+        #     safe_action, _, _ = solver.compute_safe_control(
+        #         np.array([vehicle_x, vehicle_y, vehicle_angle]),
+        #         action,
+        #         action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
+        #         values=values,
+        #     )
+        # else:
+        safe_action = action
 
         actions = {"0": safe_action}
         observations, rewards, terminations, truncations, all_done, infos = env.step(
