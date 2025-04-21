@@ -309,7 +309,42 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
         for i, obs_i in self._last_obs.items():
             line_obs = obs_i[: model.sensor_obs_dim]
             x, y, agent_angle = state[int(i)].body[:3]
-            angle_inc = 2 * math.pi / n_sensors
+            
+            # Use the FOV parameter for rendering
+            fov = getattr(model, 'fov', 2 * math.pi)
+            angle_min = -fov / 2
+            angle_max = fov / 2
+            angle_inc = fov / n_sensors
+            
+            # Draw FOV boundary lines if not full 360 degrees
+            if fov < 2 * math.pi - 0.01:  # Small epsilon to account for floating point errors
+                # Draw left boundary line
+                left_angle = angle_min + agent_angle
+                left_end_x = x + model.obs_dist * math.cos(left_angle)
+                left_end_y = y + model.obs_dist * math.sin(left_angle)
+                scaled_start = (int(x * scale_factor), int(y * scale_factor))
+                scaled_left_end = (int(left_end_x * scale_factor), int(left_end_y * scale_factor))
+                pygame.draw.line(
+                    self.window_surface,
+                    pygame.Color("blue"),  # Blue for boundary
+                    scaled_start,
+                    scaled_left_end,
+                    2  # Thicker line for boundary
+                )
+                
+                # Draw right boundary line
+                right_angle = angle_max + agent_angle
+                right_end_x = x + model.obs_dist * math.cos(right_angle)
+                right_end_y = y + model.obs_dist * math.sin(right_angle)
+                scaled_right_end = (int(right_end_x * scale_factor), int(right_end_y * scale_factor))
+                pygame.draw.line(
+                    self.window_surface,
+                    pygame.Color("blue"),  # Blue for boundary
+                    scaled_start,
+                    scaled_right_end,
+                    2  # Thicker line for boundary
+                )
+            
             for k in range(n_sensors):
                 values = [
                     line_obs[k],
@@ -319,7 +354,8 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
                 dist = values[dist_idx]
                 dist_idx = len(values) if dist == model.obs_dist else dist_idx
 
-                angle = angle_inc * k + agent_angle
+                # Map k from [0, n_sensors-1] to [angle_min, angle_max]
+                angle = angle_min + angle_inc * k + agent_angle
                 end_x = x + dist * math.cos(angle)
                 end_y = y + dist * math.sin(angle)
                 scaled_start = (int(x * scale_factor), int(y * scale_factor))
