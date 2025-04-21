@@ -284,6 +284,7 @@ class WarmStartSolver:
             safe_w = w_opt
 
             action = np.array([nominal_action[0], safe_w])
+            print("Safe action: ", action)
         else:
             print("\033[32m{}\033[0m".format("Safe controller not intervening"))
 

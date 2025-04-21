@@ -553,7 +553,7 @@ class Navigator:
         # Reduce noise for linear velocity to make it more stable
         mppi_config["noise_sigma"] = torch.diag(torch.tensor([0.3, 0.8], dtype=self.dtype, device=self.device))
         mppi_config["num_samples"] = 300  # Increase samples for better exploration
-        mppi_config["horizon"] = 25  # Increase horizon for better planning
+        mppi_config["horizon"] = 50  # Increase horizon for better planning
         mppi_config["device"] = self.device
         # First element is linear velocity, second is angular velocity
         # Limit linear velocity to a reasonable range (0.5 to 3.0) - enforce minimum positive velocity

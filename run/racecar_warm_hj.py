@@ -5,8 +5,8 @@ import math
 
 import posggym
 # Comment out reachability import since we're focusing on MPPI visualization
-# from reachability.warm_start_solver import (WarmStartSolver,
-#                                             WarmStartSolverConfig)
+from reachability.warm_start_solver import (WarmStartSolver,
+                                            WarmStartSolverConfig)
 from src.mppi import Navigator, dubins_dynamics_tensor
 
 
@@ -445,23 +445,23 @@ class OccupancyMap:
 
 def main():
 
-    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
-    env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
 
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
-    # solver = WarmStartSolver(
-    #     config=WarmStartSolverConfig(
-    #         system_name="dubins3d",
-    #         domain_cells=[MAP_WIDTH * MAP_RESOLUTION, MAP_HEIGHT * MAP_RESOLUTION, 40],
-    #         domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2*np.pi]],
-    #         mode="brt",
-    #         accuracy="medium",
-    #         converged_values=None,
-    #         until_convergent=False,
-    #         print_progress=False,
-    #     )
-    # )
+    solver = WarmStartSolver(
+        config=WarmStartSolverConfig(
+            system_name="dubins3d",
+            domain_cells=[int(MAP_WIDTH * MAP_RESOLUTION), int(MAP_HEIGHT * MAP_RESOLUTION), 40],
+            domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2*np.pi]],
+            mode="brt",
+            accuracy="medium",
+            converged_values=None,
+            until_convergent=False,
+            print_progress=False,
+        )
+    )
 
 
     occupancy_map = OccupancyMap(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
@@ -558,13 +558,13 @@ def main():
 
         # # now compute HJ reachability
         # values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
-        # if values is not None:
-        #     safe_action, _, _ = solver.compute_safe_control(np.array([vehicle_x, vehicle_y, vehicle_angle]), nominal_action, action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]), values=values)
-        # else:   
-        #     safe_action = nominal_action
+        if False and values is not None:
+            safe_action, _, _ = solver.compute_safe_control(np.array([vehicle_x, vehicle_y, vehicle_angle]), action, action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]), values=values)
+        else:   
+            safe_action = action
 
 
-        actions = {"0": action}
+        actions = {"0": safe_action}
         observations, rewards, terminations, truncations, all_done, infos = env.step(actions)
         if all_done:
             observations, infos = env.reset()
