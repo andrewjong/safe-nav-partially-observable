@@ -20,16 +20,9 @@ ROBOT_ORIGIN = [1, 1]
 robot_goal = [0, 0]
 
 # Define field of view (FOV) - the total angle range for observations
-# FOV = 2*np.pi  # Full 360-degree view
-# FOV = np.pi    # 180-degree view (front half)
-# FOV = np.pi      # 180-degree view centered at the front of the agent
-# FOV = np.pi/2  # 90-degree view centered at the front of the agent
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
-# env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+
+# Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
     world="30x30OneWall",
@@ -87,14 +80,24 @@ class OccupancyMap:
         # Initialize grid with all cells marked as UNSEEN
         self.grid = np.zeros((self.grid_height, self.grid_width), dtype=np.uint8)
 
-        # For visualization
+        # For visualization - only keeping continuous figure variables
+        # Legacy variables kept for compatibility
         self.fig = None
         self.ax = None
         self.map_img = None
         self.robot_marker = None
         self.lidar_lines = []
-        self.mppi_trajectory_lines = []
-        self.chosen_trajectory_line = None
+        
+        # MPPI visualization variables
+        self.continuous_fig = None
+        self.continuous_ax = None
+        self.continuous_occupancy_img = None
+        self.continuous_mppi_lines = []
+        self.continuous_chosen_line = None
+        self.continuous_robot_marker = None
+        self.continuous_orientation_arrow = None
+        self.goal_marker = None
+        self.legend_added = False
 
         # Last known robot position for visualization
         self.last_robot_pos = None
@@ -110,6 +113,7 @@ class OccupancyMap:
         self.last_robot_angle = None
         self.n_sensors = N_SENSORS
 
+        # Close legacy figure if it exists
         if self.fig is not None:
             plt.close(self.fig)
             self.fig = None
@@ -117,8 +121,45 @@ class OccupancyMap:
             self.map_img = None
             self.robot_marker = None
             self.lidar_lines = []
-            self.mppi_trajectory_lines = []
-            self.chosen_trajectory_line = None
+        
+        # Reset continuous figure elements without closing the window
+        if self.continuous_fig is not None:
+            # Clear previous trajectory lines
+            for line in self.continuous_mppi_lines:
+                if line in self.continuous_ax.lines:
+                    line.remove()
+            self.continuous_mppi_lines = []
+            
+            # Clear chosen trajectory line
+            if self.continuous_chosen_line is not None and self.continuous_chosen_line in self.continuous_ax.lines:
+                self.continuous_chosen_line.remove()
+                self.continuous_chosen_line = None
+            
+            # Clear robot marker and orientation arrow
+            if self.continuous_robot_marker is not None and self.continuous_robot_marker in self.continuous_ax.lines:
+                self.continuous_robot_marker.remove()
+                self.continuous_robot_marker = None
+            
+            if self.continuous_orientation_arrow is not None:
+                self.continuous_orientation_arrow.remove()
+                self.continuous_orientation_arrow = None
+            
+            # Clear goal marker
+            if self.goal_marker is not None and self.goal_marker in self.continuous_ax.lines:
+                self.goal_marker.remove()
+                self.goal_marker = None
+            
+            # Reset the grid data
+            if self.continuous_occupancy_img is not None:
+                self.continuous_occupancy_img.set_data(self.grid)
+            
+            # Reset legend state
+            self.legend_added = False
+            
+            # Redraw the figure
+            if self.continuous_fig.canvas is not None:
+                self.continuous_fig.canvas.draw_idle()
+                plt.pause(0.001)
 
     def world_to_grid(self, x, y):
         """
@@ -315,7 +356,12 @@ class OccupancyMap:
         return cells
 
     def initialize_plot(self):
-        """Initialize the matplotlib figure for visualization."""
+        """
+        Initialize the matplotlib figure for visualization.
+        
+        Note: This method is deprecated and kept for compatibility.
+        The MPPI visualization with occupancy map is now used instead.
+        """
         if self.fig is None:
             self.fig, self.ax = plt.subplots(figsize=(8, 8))
             plt.ion()  # Enable interactive mode
@@ -360,7 +406,12 @@ class OccupancyMap:
             plt.pause(0.001)
 
     def update_plot(self):
-        """Update the matplotlib visualization with current map data."""
+        """
+        Update the matplotlib visualization with current map data.
+        
+        Note: This method is deprecated and kept for compatibility.
+        The MPPI visualization with occupancy map is now used instead.
+        """
         if self.fig is None:
             self.initialize_plot()
         else:
@@ -424,10 +475,6 @@ class OccupancyMap:
             self.fig.canvas.draw()
             plt.pause(0.001)
 
-    def plot(self):
-        """Plot the occupancy map."""
-        self.update_plot()
-
     def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None):
         """
         Visualize the MPPI sampled trajectories and the chosen trajectory in continuous space.
@@ -436,16 +483,16 @@ class OccupancyMap:
             trajectories (torch.Tensor): Tensor of shape (M*K, T, nx) containing sampled trajectories
             chosen_trajectory (torch.Tensor, optional): Tensor of shape (T, nx) containing the chosen trajectory
         """
-        if self.fig is None:
-            self.initialize_plot()
-
-        # Create a separate figure for continuous space visualization
+        # Create figure for visualization with occupancy map and MPPI trajectories if it doesn't exist
         if not hasattr(self, "continuous_fig") or self.continuous_fig is None:
-            self.continuous_fig, self.continuous_ax = plt.subplots(figsize=(8, 8))
+            # Create a new figure with a unique number to avoid conflicts
+            self.continuous_fig, self.continuous_ax = plt.subplots(figsize=(8, 8), num="MPPI Visualization")
             plt.ion()  # Enable interactive mode
+            
+            # Set up the axes
             self.continuous_ax.set_xlabel("X (world units)")
             self.continuous_ax.set_ylabel("Y (world units)")
-            self.continuous_ax.set_title("MPPI Trajectories (Continuous Space)")
+            self.continuous_ax.set_title("Occupancy Map with MPPI Trajectories")
             self.continuous_ax.set_xlim(0, self.width)
             self.continuous_ax.set_ylim(
                 self.height, 0
@@ -466,21 +513,28 @@ class OccupancyMap:
             self.continuous_mppi_lines = []
             self.continuous_chosen_line = None
             self.continuous_robot_marker = None
-
+            
+            # Make sure the figure is visible
+            self.continuous_fig.canvas.draw()
+            plt.pause(0.001)
+            
         # Clear previous trajectory lines in continuous space
         for line in self.continuous_mppi_lines:
-            line.remove()
+            if line in self.continuous_ax.lines:
+                line.remove()
         self.continuous_mppi_lines = []
 
-        if self.continuous_chosen_line is not None:
+        if self.continuous_chosen_line is not None and self.continuous_chosen_line in self.continuous_ax.lines:
             self.continuous_chosen_line.remove()
             self.continuous_chosen_line = None
 
         # Update the occupancy map in the continuous space visualization
-        self.continuous_occupancy_img.set_data(self.grid)
+        if self.continuous_occupancy_img is not None:
+            self.continuous_occupancy_img.set_data(self.grid)
 
         # Update robot position in continuous space
         if self.last_robot_pos is not None:
+            # Update or create robot marker
             if self.continuous_robot_marker is None:
                 self.continuous_robot_marker = self.continuous_ax.plot(
                     [self.last_robot_pos[0]],
@@ -489,17 +543,30 @@ class OccupancyMap:
                     markersize=10,
                     label="Robot Position",
                 )[0]
-            else:
+            elif self.continuous_robot_marker in self.continuous_ax.lines:
                 self.continuous_robot_marker.set_data(
                     [self.last_robot_pos[0]], [self.last_robot_pos[1]]
                 )
+            else:
+                # If the marker was removed, create a new one
+                self.continuous_robot_marker = self.continuous_ax.plot(
+                    [self.last_robot_pos[0]],
+                    [self.last_robot_pos[1]],
+                    "ro",
+                    markersize=10,
+                    label="Robot Position",
+                )[0]
 
             # Draw robot orientation as an arrow
             if (
                 hasattr(self, "continuous_orientation_arrow")
                 and self.continuous_orientation_arrow is not None
             ):
-                self.continuous_orientation_arrow.remove()
+                try:
+                    self.continuous_orientation_arrow.remove()
+                except:
+                    # Arrow might have been removed already
+                    pass
 
             if self.last_robot_angle is not None:
                 arrow_length = 1.0  # Length of the orientation arrow
@@ -555,22 +622,28 @@ class OccupancyMap:
 
             # Add goal marker
             if hasattr(self, "goal_marker") and self.goal_marker is not None:
-                self.goal_marker.remove()
+                try:
+                    if self.goal_marker in self.continuous_ax.lines:
+                        self.goal_marker.remove()
+                except:
+                    # Goal marker might have been removed already
+                    pass
 
             self.goal_marker = self.continuous_ax.plot(
                 [robot_goal[0]], [robot_goal[1]], "g*", markersize=15, label="Goal"
             )[0]
 
-        # Add legend
-        if not hasattr(self, "legend_added") or not self.legend_added:
-            self.continuous_ax.legend()
-            self.legend_added = True
+        # Add or update legend
+        # Always update the legend to ensure it reflects current elements
+        self.continuous_ax.legend()
+        self.legend_added = True
 
-        self.continuous_fig.canvas.draw()
-        plt.pause(0.001)
-
-        # Also update the original grid visualization
-        self.update_plot()
+        # Redraw the figure without closing it
+        if self.continuous_fig.canvas is not None:
+            self.continuous_fig.canvas.draw_idle()
+            plt.pause(0.001)
+        
+        # Removed call to update_plot() - we're only using the MPPI visualization
 
 
 def main():
@@ -623,9 +696,7 @@ def main():
         # Note: goal distance is now at indices 2*N_SENSORS + 5 and 2*N_SENSORS + 6
         env.render()
 
-        # print(
-        #     f"{vehicle_x=}, {vehicle_y=}, {vehicle_angle=}, {vehicle_x_velocity=}, {vehicle_y_velocity=}"
-        # )
+        # Debug information removed
 
         # update the fail set from the lidar observations. cells that are free are marked as safe.
         # assumes the lidar observations are equally spaced from 0 to 2*pi
@@ -633,7 +704,7 @@ def main():
         occupancy_map.update_from_lidar(
             lidar_distances, vehicle_x, vehicle_y, vehicle_angle
         )
-        occupancy_map.update_plot()  # Update the plot with new data
+        # Removed redundant update_plot() call - we'll only use the MPPI visualization
 
         fail_set = occupancy_map.grid != occupancy_map.FREE
 
@@ -662,9 +733,6 @@ def main():
         sampled_trajectories = nom_controller.get_sampled_trajectories()
         chosen_trajectory = nom_controller.get_chosen_trajectory()
 
-        # Debug prints
-        # print(f"MPPI action (linear_vel, angular_vel): {mppi_action}")
-
         # Convert MPPI action to environment action format
         # MPPI: [linear_vel, angular_vel]
         # Env: [dyaw, dvel]
@@ -684,8 +752,7 @@ def main():
         # Create the environment action
         action = np.array([mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
 
-        # print(f"Current velocity: {current_vel}")
-        # print(f"Converted env action (dyaw, dvel): {action}")
+        # Action conversion complete
 
         if chosen_trajectory is not None and len(chosen_trajectory) > 1:
             # Calculate direction vector from current position to next position in trajectory
@@ -693,17 +760,11 @@ def main():
             next_pos = chosen_trajectory[1][:2].cpu().numpy()
             traj_direction = next_pos - current_pos
             traj_angle = np.arctan2(traj_direction[1], traj_direction[0])
-            # print(f"Trajectory direction: {traj_direction}, angle: {traj_angle}")
-            # print(f"Current angle: {vehicle_angle}")
-
             # Calculate expected velocity based on trajectory
             expected_linear_vel = np.linalg.norm(traj_direction) / nom_controller.dt
             expected_angular_vel = (
                 chosen_trajectory[1][2].item() - chosen_trajectory[0][2].item()
             ) / nom_controller.dt
-            # print(
-            #     f"Expected velocities - linear: {expected_linear_vel}, angular: {expected_angular_vel}"
-            # )
 
         occupancy_map.visualize_mppi_trajectories(
             sampled_trajectories, chosen_trajectory
