@@ -26,9 +26,9 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 env = posggym.make(
     "DrivingContinuous-v0",
     # world="30x30OneWall",
-    world="30x30Empty",
+    # world="30x30Empty",
     # world="30x30ScatteredObstacleField",
-    # world="14x14Sparse",
+    world="14x14Sparse",
     num_agents=1,
     n_sensors=N_SENSORS,
     obs_dist=MAX_SENSOR_DISTANCE,
