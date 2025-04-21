@@ -91,8 +91,9 @@ class OccupancyMap:
         Returns:
             tuple: (grid_row, grid_col) indices
         """
-        grid_col = int(x / self.resolution)
-        grid_row = int(y / self.resolution)
+        # Use proper rounding instead of truncation to get the nearest grid cell
+        grid_col = int(round(x / self.resolution))
+        grid_row = int(round(y / self.resolution))
         
         # Ensure indices are within grid bounds
         grid_row = max(0, min(grid_row, self.grid_height - 1))
@@ -111,8 +112,10 @@ class OccupancyMap:
         Returns:
             tuple: (x, y) coordinates in world units
         """
-        x = (col + 0.5) * self.resolution
-        y = (row + 0.5) * self.resolution
+        # Since we're using rounding in world_to_grid, we should return the center of the grid cell
+        # without adding 0.5 (which was needed when using truncation)
+        x = col * self.resolution
+        y = row * self.resolution
         return x, y
     
     def is_in_bounds(self, row, col):
@@ -128,7 +131,7 @@ class OccupancyMap:
         """
         return 0 <= row < self.grid_height and 0 <= col < self.grid_width
     
-    def update_from_lidar(self, lidar_distances, vehicle_x, vehicle_y, vehicle_angle):
+    def update_from_lidar(self, lidar_distances, vehicle_x, vehicle_y, vehicle_angle, debug=False):
         """
         Update the occupancy map based on lidar observations.
         
@@ -137,6 +140,7 @@ class OccupancyMap:
             vehicle_x (float): X coordinate of the vehicle in world units
             vehicle_y (float): Y coordinate of the vehicle in world units
             vehicle_angle (float): Orientation of the vehicle in radians
+            debug (bool): Whether to print debug information
         """
         # Store robot position for visualization
         self.last_robot_pos = (vehicle_x, vehicle_y)
@@ -144,6 +148,10 @@ class OccupancyMap:
         
         # Get robot position in grid coordinates
         robot_row, robot_col = self.world_to_grid(vehicle_x, vehicle_y)
+        
+        if debug:
+            print(f"Robot world position: ({vehicle_x}, {vehicle_y})")
+            print(f"Robot grid position: ({robot_row}, {robot_col})")
 
         # Number of lidar beams
         self.n_sensors = len(lidar_distances)
@@ -153,6 +161,9 @@ class OccupancyMap:
         
         # Process each lidar beam
         for i, distance in enumerate(lidar_distances):
+            # Only process every 4th beam in debug mode to reduce output
+            current_debug = debug and (i % 4 == 0)
+            
             # Calculate beam angle in world frame
             beam_angle = vehicle_angle + i * angle_inc
             
@@ -174,17 +185,32 @@ class OccupancyMap:
             # Convert end point to grid coordinates
             end_row, end_col = self.world_to_grid(end_x, end_y)
             
+            if current_debug:
+                print(f"Beam {i}: angle={beam_angle:.2f}, distance={distance:.2f}")
+                print(f"  End point world: ({end_x:.2f}, {end_y:.2f})")
+                print(f"  End point grid: ({end_row}, {end_col})")
+                print(f"  Obstacle detected: {obstacle_detected}")
+            
             # Use Bresenham's line algorithm to trace the beam
             cells = self.bresenham_line(robot_row, robot_col, end_row, end_col)
+            
+            if current_debug:
+                print(f"  Cells along beam: {len(cells)}")
+                if len(cells) > 0:
+                    print(f"  First cell: {cells[0]}, Last cell: {cells[-1]}")
             
             # Mark cells along the beam as free, except the last one if obstacle detected
             for j, (row, col) in enumerate(cells):
                 if j == len(cells) - 1 and obstacle_detected:
                     # Last cell contains obstacle
                     self.grid[row, col] = self.OCCUPIED
+                    if current_debug:
+                        print(f"  Marking cell ({row}, {col}) as OCCUPIED")
                 else:
                     # Intermediate cells are free
                     self.grid[row, col] = self.FREE
+                    if current_debug and j == len(cells) - 1:
+                        print(f"  Marking cell ({row}, {col}) as FREE")
     
     def bresenham_line(self, row1, col1, row2, col2):
         """
@@ -503,7 +529,11 @@ def main():
 
         # update the fail set from the lidar observations. cells that are free are marked as safe.
         # assumes the lidar observations are equally spaced from 0 to 2*pi
-        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
+        
+        # Enable debug output for the first few iterations to diagnose issues
+        debug_lidar = _ < 5  # Only debug the first 5 iterations
+        
+        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle, debug=debug_lidar)
         occupancy_map.update_plot()  # Update the plot with new data
 
         fail_set = occupancy_map.grid != occupancy_map.FREE
