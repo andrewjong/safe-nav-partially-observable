@@ -459,7 +459,7 @@ class OccupancyMap:
                 norm=plt.cm.colors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5], 3),
                 origin="upper",  # This is correct - origin at top-left
                 extent=[0, self.width, self.height, 0],
-                alpha=0.3,  # Make it semi-transparent
+                alpha=0.5,  # Make it semi-transparent
             )
 
             # Initialize empty lists for trajectory lines
@@ -727,8 +727,7 @@ def main():
         )
         reward = rewards["0"]
         if reward < 0:
-            print("AGENT COLLIDED, stopping the simulation.")
-            break
+            print("AGENT COLLIDED.")
         if all_done:
             observations, infos = env.reset()
             occupancy_map.reset()
