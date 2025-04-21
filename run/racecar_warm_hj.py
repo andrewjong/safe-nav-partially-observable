@@ -469,8 +469,16 @@ def main():
     lidar_distances, vehicle_x, vehicle_y, vehicle_angle = observations["0"][0:N_SENSORS], observations["0"][2 * N_SENSORS], observations["0"][2 * N_SENSORS + 1], observations["0"][2*N_SENSORS + 2]
 
     nom_controller = Navigator()
-    nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, [MAP_WIDTH, MAP_HEIGHT], ROBOT_ORIGIN, MAP_RESOLUTION)
-    nom_controller.set_goal(ROBOT_GOAL)
+    # Pass the actual grid dimensions, not the world dimensions
+    grid_dimensions = [occupancy_map.grid_height, occupancy_map.grid_width]
+    
+    # Scale the origin and goal based on the resolution
+    # The MPPI controller expects these in grid coordinates, not world coordinates
+    scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
+    scaled_goal = [ROBOT_GOAL[0] / MAP_RESOLUTION, ROBOT_GOAL[1] / MAP_RESOLUTION]
+    
+    nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, grid_dimensions, scaled_origin, MAP_RESOLUTION)
+    nom_controller.set_goal(scaled_goal)
 
     # creates a failure map with the given width, height and resolution.
     # unobserved cells are initialized as fail set.
