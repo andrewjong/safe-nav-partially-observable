@@ -20,16 +20,9 @@ ROBOT_ORIGIN = [1, 1]
 robot_goal = [0, 0]
 
 # Define field of view (FOV) - the total angle range for observations
-# FOV = 2*np.pi  # Full 360-degree view
-# FOV = np.pi    # 180-degree view (front half)
-# FOV = np.pi      # 180-degree view centered at the front of the agent
-# FOV = np.pi/2  # 90-degree view centered at the front of the agent
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
-# env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-# env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+
+# Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
     world="30x30OneWall",
@@ -87,14 +80,24 @@ class OccupancyMap:
         # Initialize grid with all cells marked as UNSEEN
         self.grid = np.zeros((self.grid_height, self.grid_width), dtype=np.uint8)
 
-        # For visualization
+        # For visualization - only keeping continuous figure variables
+        # Legacy variables kept for compatibility
         self.fig = None
         self.ax = None
         self.map_img = None
         self.robot_marker = None
         self.lidar_lines = []
-        self.mppi_trajectory_lines = []
-        self.chosen_trajectory_line = None
+        
+        # MPPI visualization variables
+        self.continuous_fig = None
+        self.continuous_ax = None
+        self.continuous_occupancy_img = None
+        self.continuous_mppi_lines = []
+        self.continuous_chosen_line = None
+        self.continuous_robot_marker = None
+        self.continuous_orientation_arrow = None
+        self.goal_marker = None
+        self.legend_added = False
 
         # Last known robot position for visualization
         self.last_robot_pos = None
@@ -110,6 +113,7 @@ class OccupancyMap:
         self.last_robot_angle = None
         self.n_sensors = N_SENSORS
 
+        # Close legacy figure if it exists
         if self.fig is not None:
             plt.close(self.fig)
             self.fig = None
@@ -117,8 +121,19 @@ class OccupancyMap:
             self.map_img = None
             self.robot_marker = None
             self.lidar_lines = []
-            self.mppi_trajectory_lines = []
-            self.chosen_trajectory_line = None
+        
+        # Close continuous figure if it exists
+        if self.continuous_fig is not None:
+            plt.close(self.continuous_fig)
+            self.continuous_fig = None
+            self.continuous_ax = None
+            self.continuous_occupancy_img = None
+            self.continuous_mppi_lines = []
+            self.continuous_chosen_line = None
+            self.continuous_robot_marker = None
+            self.continuous_orientation_arrow = None
+            self.goal_marker = None
+            self.legend_added = False
 
     def world_to_grid(self, x, y):
         """
@@ -315,7 +330,12 @@ class OccupancyMap:
         return cells
 
     def initialize_plot(self):
-        """Initialize the matplotlib figure for visualization."""
+        """
+        Initialize the matplotlib figure for visualization.
+        
+        Note: This method is deprecated and kept for compatibility.
+        The MPPI visualization with occupancy map is now used instead.
+        """
         if self.fig is None:
             self.fig, self.ax = plt.subplots(figsize=(8, 8))
             plt.ion()  # Enable interactive mode
@@ -360,7 +380,12 @@ class OccupancyMap:
             plt.pause(0.001)
 
     def update_plot(self):
-        """Update the matplotlib visualization with current map data."""
+        """
+        Update the matplotlib visualization with current map data.
+        
+        Note: This method is deprecated and kept for compatibility.
+        The MPPI visualization with occupancy map is now used instead.
+        """
         if self.fig is None:
             self.initialize_plot()
         else:
@@ -423,10 +448,6 @@ class OccupancyMap:
 
             self.fig.canvas.draw()
             plt.pause(0.001)
-
-    def plot(self):
-        """Plot the occupancy map."""
-        self.update_plot()
 
     def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None):
         """
@@ -619,9 +640,7 @@ def main():
         # Note: goal distance is now at indices 2*N_SENSORS + 5 and 2*N_SENSORS + 6
         env.render()
 
-        # print(
-        #     f"{vehicle_x=}, {vehicle_y=}, {vehicle_angle=}, {vehicle_x_velocity=}, {vehicle_y_velocity=}"
-        # )
+        # Debug information removed
 
         # update the fail set from the lidar observations. cells that are free are marked as safe.
         # assumes the lidar observations are equally spaced from 0 to 2*pi
@@ -658,9 +677,6 @@ def main():
         sampled_trajectories = nom_controller.get_sampled_trajectories()
         chosen_trajectory = nom_controller.get_chosen_trajectory()
 
-        # Debug prints
-        # print(f"MPPI action (linear_vel, angular_vel): {mppi_action}")
-
         # Convert MPPI action to environment action format
         # MPPI: [linear_vel, angular_vel]
         # Env: [dyaw, dvel]
@@ -680,8 +696,7 @@ def main():
         # Create the environment action
         action = np.array([mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
 
-        # print(f"Current velocity: {current_vel}")
-        # print(f"Converted env action (dyaw, dvel): {action}")
+        # Action conversion complete
 
         if chosen_trajectory is not None and len(chosen_trajectory) > 1:
             # Calculate direction vector from current position to next position in trajectory
@@ -689,17 +704,11 @@ def main():
             next_pos = chosen_trajectory[1][:2].cpu().numpy()
             traj_direction = next_pos - current_pos
             traj_angle = np.arctan2(traj_direction[1], traj_direction[0])
-            # print(f"Trajectory direction: {traj_direction}, angle: {traj_angle}")
-            # print(f"Current angle: {vehicle_angle}")
-
             # Calculate expected velocity based on trajectory
             expected_linear_vel = np.linalg.norm(traj_direction) / nom_controller.dt
             expected_angular_vel = (
                 chosen_trajectory[1][2].item() - chosen_trajectory[0][2].item()
             ) / nom_controller.dt
-            # print(
-            #     f"Expected velocities - linear: {expected_linear_vel}, angular: {expected_angular_vel}"
-            # )
 
         occupancy_map.visualize_mppi_trajectories(
             sampled_trajectories, chosen_trajectory
