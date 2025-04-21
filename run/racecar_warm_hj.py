@@ -519,7 +519,11 @@ def main():
         # For dvel, we need to convert from absolute velocity to change in velocity
         # We'll use the current velocity from the observation
         current_vel = np.linalg.norm(observations["0"][3:5])  # Get current velocity magnitude
-        dvel = mppi_action[0] - current_vel  # Change in velocity
+        
+        # Due to how the environment combines velocities, we need to negate the velocity difference
+        # The environment adds a new velocity component in the new heading direction
+        # A negative dvel effectively reduces the overall velocity
+        dvel = current_vel - mppi_action[0]  # Negated change in velocity
         
         # Create the environment action
         action = np.array([mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
