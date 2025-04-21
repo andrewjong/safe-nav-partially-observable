@@ -12,12 +12,12 @@ from src.mppi import Navigator, dubins_dynamics_tensor
 
 MAP_WIDTH = 30
 MAP_HEIGHT = 30
-MAP_RESOLUTION = 1.0  # units per cell
+MAP_RESOLUTION = .25  # units per cell
 
 N_SENSORS = 16
 MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1, 1]
-robot_goal = [0, 0]
+robot_goal = None
 
 # Define field of view (FOV) - the total angle range for observations
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
@@ -25,7 +25,10 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
-    world="30x30OneWall",
+    # world="30x30OneWall",
+    world="30x30Empty",
+    # world="30x30ScatteredObstacleField",
+    # world="14x14Sparse",
     num_agents=1,
     n_sensors=N_SENSORS,
     obs_dist=MAX_SENSOR_DISTANCE,
@@ -102,7 +105,7 @@ class OccupancyMap:
         # Last known robot position for visualization
         self.last_robot_pos = None
         self.last_robot_angle = None
-        self.n_sensors = N_SENSORS
+        self.n_sensors = None
 
     def reset(self):
         """
@@ -111,7 +114,6 @@ class OccupancyMap:
         self.grid.fill(self.UNSEEN)
         self.last_robot_pos = None
         self.last_robot_angle = None
-        self.n_sensors = N_SENSORS
 
         # Close legacy figure if it exists
         if self.fig is not None:
@@ -718,8 +720,8 @@ def main():
         ]
         global robot_goal
         robot_goal = env.state[0].dest_coord
-        scaled_goal = [robot_goal[0] / MAP_RESOLUTION, robot_goal[1] / MAP_RESOLUTION]
-        nom_controller.set_goal(scaled_goal)
+        # MPPI takes goal in world coordinates
+        nom_controller.set_goal(robot_goal)
         nom_controller.set_map(
             occupancy_map.grid != occupancy_map.FREE,
             grid_dimensions,
