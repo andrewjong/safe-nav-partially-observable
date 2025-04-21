@@ -623,18 +623,15 @@ def main():
         # Note: goal distance is now at indices 2*N_SENSORS + 5 and 2*N_SENSORS + 6
         env.render()
 
-        print(
-            f"{vehicle_x=}, {vehicle_y=}, {vehicle_angle=}, {vehicle_x_velocity=}, {vehicle_y_velocity=}"
-        )
+        # print(
+        #     f"{vehicle_x=}, {vehicle_y=}, {vehicle_angle=}, {vehicle_x_velocity=}, {vehicle_y_velocity=}"
+        # )
 
         # update the fail set from the lidar observations. cells that are free are marked as safe.
         # assumes the lidar observations are equally spaced from 0 to 2*pi
 
-        # Enable debug output for the first few iterations to diagnose issues
-        debug_lidar = _ < 5  # Only debug the first 5 iterations
-
         occupancy_map.update_from_lidar(
-            lidar_distances, vehicle_x, vehicle_y, vehicle_angle, debug=debug_lidar
+            lidar_distances, vehicle_x, vehicle_y, vehicle_angle
         )
         occupancy_map.update_plot()  # Update the plot with new data
 
@@ -666,7 +663,7 @@ def main():
         chosen_trajectory = nom_controller.get_chosen_trajectory()
 
         # Debug prints
-        print(f"MPPI action (linear_vel, angular_vel): {mppi_action}")
+        # print(f"MPPI action (linear_vel, angular_vel): {mppi_action}")
 
         # Convert MPPI action to environment action format
         # MPPI: [linear_vel, angular_vel]
@@ -687,8 +684,8 @@ def main():
         # Create the environment action
         action = np.array([mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
 
-        print(f"Current velocity: {current_vel}")
-        print(f"Converted env action (dyaw, dvel): {action}")
+        # print(f"Current velocity: {current_vel}")
+        # print(f"Converted env action (dyaw, dvel): {action}")
 
         if chosen_trajectory is not None and len(chosen_trajectory) > 1:
             # Calculate direction vector from current position to next position in trajectory
@@ -696,17 +693,17 @@ def main():
             next_pos = chosen_trajectory[1][:2].cpu().numpy()
             traj_direction = next_pos - current_pos
             traj_angle = np.arctan2(traj_direction[1], traj_direction[0])
-            print(f"Trajectory direction: {traj_direction}, angle: {traj_angle}")
-            print(f"Current angle: {vehicle_angle}")
+            # print(f"Trajectory direction: {traj_direction}, angle: {traj_angle}")
+            # print(f"Current angle: {vehicle_angle}")
 
             # Calculate expected velocity based on trajectory
             expected_linear_vel = np.linalg.norm(traj_direction) / nom_controller.dt
             expected_angular_vel = (
                 chosen_trajectory[1][2].item() - chosen_trajectory[0][2].item()
             ) / nom_controller.dt
-            print(
-                f"Expected velocities - linear: {expected_linear_vel}, angular: {expected_angular_vel}"
-            )
+            # print(
+            #     f"Expected velocities - linear: {expected_linear_vel}, angular: {expected_angular_vel}"
+            # )
 
         occupancy_map.visualize_mppi_trajectories(
             sampled_trajectories, chosen_trajectory
@@ -728,9 +725,10 @@ def main():
         observations, rewards, terminations, truncations, all_done, infos = env.step(
             actions
         )
-        print(
-            f"Reward: {rewards["0"]}, Termination: {terminations['0']}, Truncation: {truncations['0']}"
-        )
+        reward = rewards["0"]
+        if reward < 0:
+            print("AGENT COLLIDED, stopping the simulation.")
+            break
         if all_done:
             observations, infos = env.reset()
             occupancy_map.reset()
