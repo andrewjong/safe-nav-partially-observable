@@ -14,7 +14,7 @@ MAP_WIDTH = 30
 MAP_HEIGHT = 30
 MAP_RESOLUTION = 1.0  # units per cell
 
-N_SENSORS = 32
+N_SENSORS = 16
 MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1,1]
 robot_goal=[0,0]
@@ -25,8 +25,7 @@ robot_goal=[0,0]
 # FOV = np.pi      # 180-degree view centered at the front of the agent
 # FOV = np.pi/2  # 90-degree view centered at the front of the agent
 FOV = np.pi/4  # 45-degree view centered at the front of the agent
-# env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, 
-#                     obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+# env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 # env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 # env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
