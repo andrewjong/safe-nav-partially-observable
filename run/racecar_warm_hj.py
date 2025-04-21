@@ -19,6 +19,18 @@ MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1,1]
 robot_goal=[0,0]
 
+# Define field of view (FOV) - the total angle range for observations
+# FOV = 2*np.pi  # Full 360-degree view
+# FOV = np.pi    # 180-degree view (front half)
+# FOV = np.pi      # 180-degree view centered at the front of the agent
+# FOV = np.pi/2  # 90-degree view centered at the front of the agent
+FOV = np.pi/4  # 45-degree view centered at the front of the agent
+# env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, 
+#                     obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+# env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+# env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
+# env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 
 class OccupancyMap:
     """
@@ -494,17 +506,6 @@ class OccupancyMap:
 
 def main():
 
-    # Define field of view (FOV) - the total angle range for observations
-    # FOV = 2*np.pi  # Full 360-degree view
-    # FOV = np.pi    # 180-degree view (front half)
-    FOV = np.pi      # 180-degree view centered at the front of the agent
-    # FOV = np.pi/2  # 90-degree view centered at the front of the agent
-    env = posggym.make('DrivingContinuous-v0', world="14x14Sparse", num_agents=1, n_sensors=N_SENSORS, 
-                      obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="14x14CrissCross", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="14x14Blocks", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, fov=FOV, render_mode="human")
 
     global MAP_WIDTH, MAP_HEIGHT
     MAP_WIDTH = env.model.state_space[0][0].high[0]
