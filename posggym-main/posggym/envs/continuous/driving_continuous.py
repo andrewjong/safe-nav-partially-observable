@@ -452,7 +452,7 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
         self.fov = fov
         # Calculate angle bounds based on fov
         self.angle_bounds = (-self.fov / 2, self.fov / 2)
-        self.vehicle_collision_dist = 2.1 * self.world.agent_radius
+        self.vehicle_collision_dist = 2.0 * self.world.agent_radius
 
         self.possible_agents = tuple(str(i) for i in range(num_agents))
         self.state_space = spaces.Tuple(
@@ -675,7 +675,7 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
             # Check for collisions with blocks (obstacles)
             for block_pos, block_radius in self.world.blocks:
                 dist = np.linalg.norm(np.array(block_pos) - agent_pos)
-                if dist <= (block_radius + self.vehicle_collision_dist):
+                if dist <= (block_radius + self.world.agent_radius):
                     crashed = True
                     collision_types[idx] = CollisionType.BLOCK
                     break
@@ -702,7 +702,7 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
                 dist = np.linalg.norm(agent_pos - closest_point)
                 
                 # Check if distance is less than collision threshold
-                if dist <= self.vehicle_collision_dist:
+                if dist <= self.world.agent_radius:
                     crashed = True
                     collision_types[idx] = CollisionType.INTERIOR_WALL
                     break
