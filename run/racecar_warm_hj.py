@@ -12,12 +12,12 @@ from src.mppi import Navigator, dubins_dynamics_tensor
 
 MAP_WIDTH = 30
 MAP_HEIGHT = 30
-MAP_RESOLUTION = 0.5  # units per cell
+MAP_RESOLUTION = 1.0  # units per cell
 
 N_SENSORS = 32
 MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1,1]
-ROBOT_GOAL = [27, 28]
+robot_goal=[0,0]
 
 
 class OccupancyMap:
@@ -427,7 +427,7 @@ class OccupancyMap:
                 self.goal_marker.remove()
                 
             self.goal_marker = self.continuous_ax.plot(
-                [ROBOT_GOAL[0]], [ROBOT_GOAL[1]], 
+                [robot_goal[0]], [robot_goal[1]], 
                 'g*', markersize=15, label='Goal'
             )[0]
             
@@ -447,6 +447,7 @@ def main():
 
     # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
     env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
     # solver = WarmStartSolver(
@@ -475,7 +476,9 @@ def main():
     # Scale the origin and goal based on the resolution
     # The MPPI controller expects these in grid coordinates, not world coordinates
     scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
-    scaled_goal = [ROBOT_GOAL[0] / MAP_RESOLUTION, ROBOT_GOAL[1] / MAP_RESOLUTION]
+    global robot_goal
+    robot_goal = env.state[0].dest_coord
+    scaled_goal = [robot_goal[0] / MAP_RESOLUTION, robot_goal[1] / MAP_RESOLUTION]
     
     nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, grid_dimensions, scaled_origin, MAP_RESOLUTION)
     nom_controller.set_goal(scaled_goal)
