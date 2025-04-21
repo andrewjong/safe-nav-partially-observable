@@ -151,9 +151,6 @@ class OccupancyMap:
         # Angle between consecutive lidar beams
         angle_inc = 2 * math.pi / self.n_sensors
         
-        # Maximum distance to trace along each beam
-        MAX_SENSOR_DISTANCE = 5.0  # Assuming this is the max lidar range
-        
         # Process each lidar beam
         for i, distance in enumerate(lidar_distances):
             # Calculate beam angle in world frame
@@ -448,8 +445,8 @@ class OccupancyMap:
 
 def main():
 
-    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
-    env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, render_mode="human")
+    env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
     # solver = WarmStartSolver(
