@@ -10,3 +10,8 @@ Then install the local racecar_gym package using pip:
 cd racecar_gym/
 pip install -e .
 ```
+
+## Run
+```bash
+PYTHONPATH="." python run/racecar_warm_hj.py
+```
