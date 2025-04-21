@@ -12,7 +12,7 @@ from src.mppi import Navigator, dubins_dynamics_tensor
 
 MAP_WIDTH = 30
 MAP_HEIGHT = 30
-MAP_RESOLUTION = 1.0
+MAP_RESOLUTION = 0.5  # units per cell
 
 N_SENSORS = 32
 MAX_SENSOR_DISTANCE = 5.0
@@ -445,8 +445,8 @@ class OccupancyMap:
 
 def main():
 
-    env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
-    # env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    # env = posggym.make('DrivingContinuous-v0', world="30x30ScatteredObstacleField", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
+    env = posggym.make('DrivingContinuous-v0', world="30x30Empty", num_agents=1, n_sensors=N_SENSORS, obs_dist=MAX_SENSOR_DISTANCE, render_mode="human")
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
     # solver = WarmStartSolver(
@@ -506,6 +506,7 @@ def main():
         fail_set = occupancy_map.grid != occupancy_map.FREE
 
         # compute a nominal action via MPPI
+        nom_controller.set_map(occupancy_map.grid != occupancy_map.FREE, grid_dimensions, scaled_origin, MAP_RESOLUTION)
         nom_controller.set_odom((vehicle_x, vehicle_y), vehicle_angle)
         mppi_action = nom_controller.get_command().cpu().numpy()
         
