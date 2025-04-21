@@ -364,7 +364,7 @@ class OccupancyMap:
             self.continuous_ax.set_ylabel('Y (world units)')
             self.continuous_ax.set_title('MPPI Trajectories (Continuous Space)')
             self.continuous_ax.set_xlim(0, self.width)
-            self.continuous_ax.set_ylim(0, self.height)
+            self.continuous_ax.set_ylim(self.height, 0)  # Flip Y-axis to match grid coordinates (0,0 at top-left)
             self.continuous_ax.grid(True)
             
             # Add a colorbar for the occupancy map
@@ -372,7 +372,7 @@ class OccupancyMap:
                 self.grid, 
                 cmap=plt.cm.colors.ListedColormap(['gray', 'white', 'black']),
                 norm=plt.cm.colors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5], 3),
-                origin='upper',
+                origin='upper',  # This is correct - origin at top-left
                 extent=[0, self.width, self.height, 0],
                 alpha=0.3  # Make it semi-transparent
             )
@@ -413,6 +413,7 @@ class OccupancyMap:
             if self.last_robot_angle is not None:
                 arrow_length = 1.0  # Length of the orientation arrow
                 dx = arrow_length * math.cos(self.last_robot_angle)
+                # Flip the y-component to match the flipped y-axis
                 dy = arrow_length * math.sin(self.last_robot_angle)
                 self.continuous_orientation_arrow = self.continuous_ax.arrow(
                     self.last_robot_pos[0], self.last_robot_pos[1], dx, dy,

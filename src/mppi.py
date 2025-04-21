@@ -590,10 +590,14 @@ class Navigator:
         return:
         cost: shape(num_samples)
         """
+        # Convert world coordinates to grid coordinates
+        # Note: The occupancy map has (0,0) at the top-left corner
         position_map = (
             current_state[..., :2] - self._map_origin_torch
         ) / self._cell_size
         position_map = torch.round(position_map).long().to(self.device)
+        
+        # Check if positions are out of bounds
         is_out_of_bound = torch.logical_or(
             torch.logical_or(
                 position_map[..., 0] < 0,
@@ -604,14 +608,20 @@ class Navigator:
                 position_map[..., 1] >= self._map_torch.shape[0],
             ),
         )
+        
+        # Clamp positions to be within bounds
         position_map[..., 0] = torch.clamp(
             position_map[..., 0], 0, self._map_torch.shape[1] - 1
         )
         position_map[..., 1] = torch.clamp(
             position_map[..., 1], 0, self._map_torch.shape[0] - 1
         )
-        # Collision check
+        
+        # Collision check - use row (y) and column (x) indexing
+        # Note: In PyTorch, the first index is row (y) and the second is column (x)
         collisions = self._map_torch[position_map[..., 1], position_map[..., 0]]
+        
+        # Convert map values to collision costs
         collisions = torch.where(
             collisions == -1, torch.tensor(0.0, device=self.device), collisions.float()
         )
