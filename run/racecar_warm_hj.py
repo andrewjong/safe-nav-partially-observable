@@ -758,28 +758,19 @@ def main():
         
         # Visualize the HJ reachability level set
         if values is not None:
-            # Check if the current state is safe
-            is_safe, value, _ = solver.check_if_safe(
-                np.array([vehicle_x, vehicle_y, vehicle_angle]),
-                values
-            )
-            
             # Compute safe action
-            safe_mppi_action, _, _ = solver.compute_safe_control(
+            safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle]),
                 mppi_action,
                 action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
                 values=values,
             )
             
-            # Safety is intervening if the state is not safe
-            safety_intervening = not is_safe
-            
             # Visualize with safety status
             visualize_hj_level_set(
                 values, fail_set, occupancy_map, 
                 vehicle_x, vehicle_y, vehicle_angle, 
-                solver, safety_intervening=safety_intervening
+                solver, safety_intervening=has_intervened
             )
         else:
             safe_mppi_action = mppi_action

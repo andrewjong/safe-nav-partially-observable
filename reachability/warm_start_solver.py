@@ -264,6 +264,8 @@ class WarmStartSolver:
 
         action = nominal_action
 
+        has_intervened = not is_safe
+
         if not is_safe:
             print("\033[31m{}\033[0m".format("Safe controller intervening. Value is:"))
 
@@ -288,7 +290,7 @@ class WarmStartSolver:
         else:
             print("\033[32m{}\033[0m".format("Safe controller not intervening"))
 
-        return action, value, initial_value
+        return action, value, initial_value, has_intervened
 
     def _state_to_grid(self, state):
         grid = self.problem_definition["grid"]
