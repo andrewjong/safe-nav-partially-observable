@@ -27,9 +27,9 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 env = posggym.make(
     "DrivingContinuous-v0",
     # world="30x30OneWall",
-    # world="30x30Empty",
+    world="30x30Empty",
     # world="30x30ScatteredObstacleField",
-    world="14x14Sparse",
+    # world="14x14Sparse",
     num_agents=1,
     n_sensors=N_SENSORS,
     obs_dist=MAX_SENSOR_DISTANCE,
@@ -812,6 +812,22 @@ def main():
         if all_done:
             observations, infos = env.reset()
             occupancy_map.reset()
+            solver = WarmStartSolver(
+                config=WarmStartSolverConfig(
+                    system_name="dubins3d",
+                    domain_cells=[
+                        int(MAP_WIDTH / MAP_RESOLUTION),
+                        int(MAP_HEIGHT / MAP_RESOLUTION),
+                        30,
+                    ],
+                    domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2 * np.pi]],
+                    mode="brt",
+                    accuracy="medium",
+                    converged_values=None,
+                    until_convergent=True,
+                    print_progress=True,
+                )
+    )
 
     env.close()
     plt.ioff()  # Turn off interactive mode when done
