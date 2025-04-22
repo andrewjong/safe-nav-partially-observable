@@ -737,27 +737,6 @@ def main():
         sampled_trajectories = nom_controller.get_sampled_trajectories()
         chosen_trajectory = nom_controller.get_chosen_trajectory()
 
-        # Convert MPPI action to environment action format
-        # MPPI: [linear_vel, angular_vel]
-        # Env: [dyaw, dvel]
-        #
-        # For dyaw, we can use the angular velocity directly (dt=0.1 is assumed in the environment)
-        # For dvel, we need to convert from absolute velocity to change in velocity
-        # We'll use the current velocity from the observation
-        current_vel = np.linalg.norm(
-            observations["0"][3:5]
-        )  # Get current velocity magnitude
-
-        # Due to how the environment combines velocities, we need to negate the velocity difference
-        # The environment adds a new velocity component in the new heading direction
-        # A negative dvel effectively reduces the overall velocity
-        dvel = current_vel - mppi_action[0]  # Negated change in velocity
-
-        # Create the environment action
-        action = np.array([mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
-
-        # Action conversion complete
-
         if chosen_trajectory is not None and len(chosen_trajectory) > 1:
             # Calculate direction vector from current position to next position in trajectory
             current_pos = chosen_trajectory[0][:2].cpu().numpy()
@@ -775,7 +754,7 @@ def main():
         )
 
         # # now compute HJ reachability
-        values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
+        values = solver.solve(fail_set, target_time=-10.0, dt=0.1, epsilon=0.0001)
         
         # Visualize the HJ reachability level set
         if values is not None:
@@ -786,9 +765,9 @@ def main():
             )
             
             # Compute safe action
-            safe_action, _, _ = solver.compute_safe_control(
+            safe_mppi_action, _, _ = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle]),
-                action,
+                mppi_action,
                 action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
                 values=values,
             )
@@ -803,11 +782,29 @@ def main():
                 solver, safety_intervening=safety_intervening
             )
         else:
-            safe_action = action
+            safe_mppi_action = mppi_action
 
-        actions = {"0": safe_action}
+        # Convert MPPI action to environment action format
+        # MPPI: [linear_vel, angular_vel]
+        # Env: [dyaw, dvel]
+        #
+        # For dyaw, we can use the angular velocity directly (dt=0.1 is assumed in the environment)
+        # For dvel, we need to convert from absolute velocity to change in velocity
+        # We'll use the current velocity from the observation
+        current_vel = np.linalg.norm(
+            observations["0"][3:5]
+        )  # Get current velocity magnitude
+
+        # Due to how the environment combines velocities, we need to negate the velocity difference
+        # The environment adds a new velocity component in the new heading direction
+        # A negative dvel effectively reduces the overall velocity
+        dvel = current_vel - safe_mppi_action[0]  # Negated change in velocity
+
+        # Convert the action to the environment's format, which is [dyaw, dvel]. Whereas our controller code outputs [linear_vel, angular_vel]
+        posggym_action = np.array([safe_mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
+        # Action conversion complete
         observations, rewards, terminations, truncations, all_done, infos = env.step(
-            actions
+            {"0": posggym_action}
         )
         reward = rewards["0"]
         if reward < 0:
