@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import math
+import time
 
 import posggym
 
@@ -775,7 +776,11 @@ def main():
 
         # # now compute HJ reachability
         values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
+        
+        # Visualize the HJ reachability level set
         if values is not None:
+            visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y, vehicle_angle, solver)
+            
             safe_action, _, _ = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle]),
                 action,
@@ -800,6 +805,105 @@ def main():
     plt.ioff()  # Turn off interactive mode when done
     plt.show()  # Show the final plot
 
+
+def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y, vehicle_angle, solver):
+    """
+    Visualize the HJ reachability level set on a separate heat map plot.
+    
+    Args:
+        values (np.ndarray): The value function from HJ reachability computation
+        fail_set (np.ndarray): The fail set (obstacles)
+        occupancy_map (OccupancyMap): The occupancy map
+        vehicle_x (float): Current vehicle x position
+        vehicle_y (float): Current vehicle y position
+        vehicle_angle (float): Current vehicle orientation
+        solver (WarmStartSolver): The HJ reachability solver
+    """
+    # Check if we already have a figure for HJ visualization
+    hj_fig = None
+    for i in plt.get_fignums():
+        fig = plt.figure(i)
+        if hasattr(fig, 'hj_visualization') and fig.hj_visualization:
+            hj_fig = fig
+            plt.figure(hj_fig.number)
+            plt.clf()
+            break
+    
+    # Create a new figure if none exists
+    if hj_fig is None:
+        hj_fig = plt.figure(figsize=(10, 8))
+        hj_fig.hj_visualization = True
+    
+    ax = hj_fig.add_subplot(111)
+    
+    # Get the current slice of the value function at the current vehicle angle
+    angle_index = min(int((vehicle_angle % (2 * np.pi)) / (2 * np.pi) * (values.shape[2] - 1)), values.shape[2] - 1)
+    value_slice = np.array(values[:, :, angle_index])  # Convert to numpy array if it's a JAX array
+    
+    # Create coordinate meshgrid for plotting
+    x = np.linspace(0, occupancy_map.width, occupancy_map.grid_width)
+    y = np.linspace(0, occupancy_map.height, occupancy_map.grid_height)
+    X, Y = np.meshgrid(x, y)
+    
+    # Plot the occupancy map as background
+    occupancy_cmap = plt.cm.colors.ListedColormap(['black', 'white', 'gray'])
+    occupancy_bounds = [-0.5, 0.5, 1.5, 2.5]
+    occupancy_norm = plt.cm.colors.BoundaryNorm(occupancy_bounds, occupancy_cmap.N)
+    ax.pcolormesh(X, Y, occupancy_map.grid, cmap=occupancy_cmap, norm=occupancy_norm, alpha=0.3)
+    
+    # Plot the value function as a heat map
+    # Clip the values to a reasonable range for better visualization
+    min_val, max_val = np.min(value_slice), np.max(value_slice)
+    value_range = max_val - min_val
+    vmin, vmax = min_val - 0.1 * value_range, max_val + 0.1 * value_range
+    
+    value_contour = ax.contourf(X, Y, value_slice, levels=20, cmap='viridis', alpha=0.7, vmin=vmin, vmax=vmax)
+    cbar = plt.colorbar(value_contour, ax=ax, label='Value Function')
+    
+    # Plot the zero level set (boundary of unsafe set)
+    try:
+        unsafe_boundary = ax.contour(X, Y, value_slice, levels=[0], colors='red', linewidths=2)
+        ax.clabel(unsafe_boundary, inline=True, fontsize=10, fmt='Unsafe')
+    except:
+        print("Could not plot unsafe boundary - no zero level set found")
+    
+    # Plot the fail set boundary
+    try:
+        # Convert fail_set to numpy array if it's not already
+        fail_set_np = np.array(fail_set)
+        fail_boundary = ax.contour(X, Y, fail_set_np, levels=[0.5], colors='black', linewidths=2)
+        ax.clabel(fail_boundary, inline=True, fontsize=10, fmt='Fail')
+    except:
+        print("Could not plot fail set boundary")
+    
+    # Plot the vehicle position
+    ax.plot(vehicle_x, vehicle_y, 'ro', markersize=10, label='Vehicle')
+    
+    # Add an arrow to show vehicle orientation
+    arrow_length = 1.0
+    dx = arrow_length * np.cos(vehicle_angle)
+    dy = arrow_length * np.sin(vehicle_angle)
+    ax.arrow(vehicle_x, vehicle_y, dx, dy, head_width=0.3, head_length=0.5, fc='r', ec='r')
+    
+    # Set plot title and labels
+    ax.set_title('HJ Reachability Level Set Visualization')
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    
+    # Add legend
+    ax.legend(loc='upper right')
+    
+    # Set equal aspect ratio
+    ax.set_aspect('equal')
+    
+    # Add timestamp
+    timestamp = f"Time: {time.time():.1f}s"
+    ax.text(0.02, 0.02, timestamp, transform=ax.transAxes, fontsize=10, 
+            verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+    
+    # Show the plot without blocking
+    hj_fig.canvas.draw_idle()
+    plt.pause(0.001)
 
 if __name__ == "__main__":
     main()
