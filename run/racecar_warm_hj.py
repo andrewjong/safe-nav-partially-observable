@@ -779,13 +779,28 @@ def main():
         
         # Visualize the HJ reachability level set
         if values is not None:
-            visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y, vehicle_angle, solver)
+            # Check if the current state is safe
+            is_safe, value, _ = solver.check_if_safe(
+                np.array([vehicle_x, vehicle_y, vehicle_angle]),
+                values
+            )
             
+            # Compute safe action
             safe_action, _, _ = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle]),
                 action,
                 action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
                 values=values,
+            )
+            
+            # Safety is intervening if the state is not safe
+            safety_intervening = not is_safe
+            
+            # Visualize with safety status
+            visualize_hj_level_set(
+                values, fail_set, occupancy_map, 
+                vehicle_x, vehicle_y, vehicle_angle, 
+                solver, safety_intervening=safety_intervening
             )
         else:
             safe_action = action
@@ -806,7 +821,7 @@ def main():
     plt.show()  # Show the final plot
 
 
-def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y, vehicle_angle, solver):
+def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y, vehicle_angle, solver, safety_intervening=False):
     """
     Visualize the HJ reachability level set on a separate heat map plot.
     
@@ -818,6 +833,7 @@ def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y
         vehicle_y (float): Current vehicle y position
         vehicle_angle (float): Current vehicle orientation
         solver (WarmStartSolver): The HJ reachability solver
+        safety_intervening (bool): Whether the safety filter is currently intervening
     """
     # Check if we already have a figure for HJ visualization
     hj_fig = None
@@ -876,14 +892,17 @@ def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y
     except:
         print("Could not plot fail set boundary")
     
-    # Plot the vehicle position
-    ax.plot(vehicle_x, vehicle_y, 'ro', markersize=10, label='Vehicle')
+    # Plot the vehicle position with color based on safety intervention
+    robot_color = 'cyan' if safety_intervening else 'red'
+    robot_label = 'Vehicle (Safety Active)' if safety_intervening else 'Vehicle (Nominal)'
+    ax.plot(vehicle_x, vehicle_y, 'o', color=robot_color, markersize=10, label=robot_label)
     
     # Add an arrow to show vehicle orientation
     arrow_length = 1.0
     dx = arrow_length * np.cos(vehicle_angle)
     dy = arrow_length * np.sin(vehicle_angle)
-    ax.arrow(vehicle_x, vehicle_y, dx, dy, head_width=0.3, head_length=0.5, fc='r', ec='r')
+    ax.arrow(vehicle_x, vehicle_y, dx, dy, head_width=0.3, head_length=0.5, 
+             fc=robot_color, ec=robot_color)
     
     # Set plot title and labels
     ax.set_title('HJ Reachability Level Set Visualization')
@@ -896,10 +915,27 @@ def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y
     # Set equal aspect ratio
     ax.set_aspect('equal')
     
-    # Add timestamp
+    # Invert y-axis to have (0,0) in the top left
+    ax.invert_yaxis()
+    
+    # Set axis limits to match the occupancy map dimensions
+    ax.set_xlim(0, occupancy_map.width)
+    ax.set_ylim(occupancy_map.height, 0)  # Inverted y-axis
+    
+    # Add timestamp and safety status
     timestamp = f"Time: {time.time():.1f}s"
+    safety_status = "SAFETY ACTIVE" if safety_intervening else "NOMINAL CONTROL"
+    status_color = "cyan" if safety_intervening else "green"
+    
+    # Add timestamp at bottom left
     ax.text(0.02, 0.02, timestamp, transform=ax.transAxes, fontsize=10, 
             verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+    
+    # Add safety status at top right
+    ax.text(0.98, 0.98, safety_status, transform=ax.transAxes, fontsize=12, 
+            color=status_color, weight='bold',
+            horizontalalignment='right', verticalalignment='top', 
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
     
     # Show the plot without blocking
     hj_fig.canvas.draw_idle()
