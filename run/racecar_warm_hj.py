@@ -12,7 +12,7 @@ from src.mppi import Navigator, dubins_dynamics_tensor
 
 MAP_WIDTH = 30
 MAP_HEIGHT = 30
-MAP_RESOLUTION = .25  # units per cell
+MAP_RESOLUTION = .5  # units per cell
 
 N_SENSORS = 16
 MAX_SENSOR_DISTANCE = 5.0
@@ -775,15 +775,15 @@ def main():
 
         # # now compute HJ reachability
         values = solver.solve(fail_set.T, target_time=-10.0, dt=0.1, epsilon=0.0001)
-        # if values is not None:
-        #     safe_action, _, _ = solver.compute_safe_control(
-        #         np.array([vehicle_x, vehicle_y, vehicle_angle]),
-        #         action,
-        #         action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
-        #         values=values,
-        #     )
-        # else:
-        safe_action = action
+        if values is not None:
+            safe_action, _, _ = solver.compute_safe_control(
+                np.array([vehicle_x, vehicle_y, vehicle_angle]),
+                action,
+                action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
+                values=values,
+            )
+        else:
+            safe_action = action
 
         actions = {"0": safe_action}
         observations, rewards, terminations, truncations, all_done, infos = env.step(
