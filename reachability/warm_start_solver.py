@@ -1,5 +1,6 @@
 import numpy as np
 import skfmm
+import cvxpy as cp
 
 import hj_reachability as hj
 import jax.numpy as jnp
@@ -20,11 +21,15 @@ from src.failure_map_builder import GPFailureMapBuilder, FailureMapParams
 
 @dataclass
 class WarmStartSolverConfig:
-    system_name: str # "dubins3d"
-    domain_cells: np.ndarray # 1-dim: e.g [x_resolution, y_resolution, theta_resolution]
-    domain: np.ndarray # 2-dim: e.g [[x_min, y_min, theta_min], [x_max, y_max, theta_max]]
-    mode: str # "brs" or "brt"
-    accuracy: str # "low", "medium", "high", "very_high"
+    system_name: str  # "dubins3d"
+    domain_cells: (
+        np.ndarray
+    )  # 1-dim: e.g [x_resolution, y_resolution, theta_resolution]
+    domain: (
+        np.ndarray
+    )  # 2-dim: e.g [[x_min, y_min, theta_min], [x_max, y_max, theta_max]]
+    mode: str  # "brs" or "brt"
+    accuracy: str  # "low", "medium", "high", "very_high"
     superlevel_set_epsilon: float = 0.1
     converged_values: np.ndarray | None = None
     until_convergent: bool = True
@@ -33,39 +38,99 @@ class WarmStartSolverConfig:
 
 # FUCKKKKK. FUCK FUCK FUCK
 speed = 0.0
+
+
 class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
-    def __init__(self,
-                 max_turn_rate=1.,
-                 control_mode="max",
-                 disturbance_mode="min",
-                 control_space=None,
-                 disturbance_space=None):
+    def __init__(
+        self,
+        max_turn_rate=1.0,
+        control_mode="max",
+        disturbance_mode="min",
+        control_space=None,
+        disturbance_space=None,
+    ):
         self.speed = speed
         if control_space is None:
-            control_space = sets.Box(jnp.array([-max_turn_rate]), jnp.array([max_turn_rate]))
+            control_space = sets.Box(
+                jnp.array([-max_turn_rate]), jnp.array([max_turn_rate])
+            )
         if disturbance_space is None:
             disturbance_space = sets.Box(jnp.array([0, 0]), jnp.array([0, 0]))
-        super().__init__(control_mode, disturbance_mode, control_space, disturbance_space)
+        super().__init__(
+            control_mode, disturbance_mode, control_space, disturbance_space
+        )
 
     def open_loop_dynamics(self, state, time):
         _, _, psi = state
         v = self.speed
-        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.])
+        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.0])
 
     def control_jacobian(self, state, time):
         x, y, _ = state
-        return jnp.array([
-            [0],
-            [0],
-            [1],
-        ])
+        return jnp.array(
+            [
+                [0],
+                [0],
+                [1],
+            ]
+        )
 
     def disturbance_jacobian(self, state, time):
-        return jnp.array([
-            [1., 0.],
-            [0., 1.],
-            [0., 0.],
-        ])
+        return jnp.array(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [0.0, 0.0],
+            ]
+        )
+
+
+# class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
+#     def __init__(
+#         self,
+#         max_acceleration=1.0,
+#         max_curvature=1.0,
+#         max_position_disturbance=0.25,
+#         control_mode="min",
+#         disturbance_mode="max",
+#         control_space=None,
+#         disturbance_space=None,
+#     ):
+#         if control_space is None:
+#             control_space = hj.sets.Box(
+#                 jnp.array([-max_acceleration, -max_curvature]),
+#                 jnp.array([max_acceleration, max_curvature]),
+#             )
+#         if disturbance_space is None:
+#             disturbance_space = hj.sets.Ball(jnp.zeros(2), max_position_disturbance)
+#         super().__init__(
+#             control_mode, disturbance_mode, control_space, disturbance_space
+#         )
+
+#     def open_loop_dynamics(self, state, time):
+#         _, _, v, q = state
+#         return jnp.array([v * jnp.cos(q), v * jnp.sin(q), 0.0, 0.0])
+
+#     def control_jacobian(self, state, time):
+#         v = state[2]
+#         return jnp.array(
+#             [
+#                 [0.0, 0.0],
+#                 [0.0, 0.0],
+#                 [1.0, 0.0],
+#                 [0.0, v],
+#             ]
+#         )
+
+#     def disturbance_jacobian(self, state, time):
+#         return jnp.array(
+#             [
+#                 [1.0, 0.0],
+#                 [0.0, 1.0],
+#                 [0.0, 0.0],
+#                 [0.0, 0.0],
+#             ]
+#         )
 
 class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
     def __init__(self,
@@ -102,6 +167,7 @@ class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
             [0., 0., 1.],  # Added disturbance channel for velocity
         ])
 
+
 class WarmStartSolver:
     def __init__(
         self,
@@ -110,7 +176,9 @@ class WarmStartSolver:
         self.config = config
 
         self.problem_definition = None
-        self.initial_values = None  # used to check if robot reached a failure (not just unsafe) state
+        self.initial_values = (
+            None  # used to check if robot reached a failure (not just unsafe) state
+        )
         self.last_values = self.config.converged_values if not None else None
         self.last_grid_map = None
 
@@ -187,7 +255,9 @@ class WarmStartSolver:
             warm_values[changed] = l_x[changed]
         return warm_values
 
-    def compute_initial_values(self, grid_map: np.ndarray, dx: float = 0.1) -> np.ndarray:
+    def compute_initial_values(
+        self, grid_map: np.ndarray, dx: float = 0.1
+    ) -> np.ndarray:
         """
         computes l(x) where grid_map is an occupancy map assuming 0 = occupied, 1 = free
         :param grid_map: 2D numpy array of occupancy values
@@ -196,17 +266,26 @@ class WarmStartSolver:
         :return: system-dim-D numpy array of initial values. e.g. for dubins3d, this is a 3D array
         """
         if self.config.system_name == "dubins3d":
-            initial_values = grid_map - 0.5 # offset to make sure the distance is 0 at the border
+            initial_values = (
+                grid_map - 0.5
+            )  # offset to make sure the distance is 0 at the border
             initial_values = skfmm.distance(initial_values, dx=dx)
-            initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
+            initial_values = np.tile(
+                initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2])
+            )
             return initial_values
         elif self.config.system_name == "dubins3d_velocity":
             initial_values = grid_map - 0.5
             initial_values = skfmm.distance(initial_values, dx=dx)
-            initial_values = np.tile(initial_values[:, :, np.newaxis, np.newaxis], (1, 1, self.config.domain_cells[2], self.config.domain_cells[3]))
+            initial_values = np.tile(
+                initial_values[:, :, np.newaxis, np.newaxis],
+                (1, 1, self.config.domain_cells[2], self.config.domain_cells[3]),
+            )
             return initial_values
         else:
-            raise NotImplementedError(f"System {self.config.system_name} not implemented")
+            raise NotImplementedError(
+                f"System {self.config.system_name} not implemented"
+            )
 
     def step(self, problem_definition, initial_values, time, target_time):
         target_values = hj.step(
@@ -218,15 +297,35 @@ class WarmStartSolver:
         )
         return target_values
 
-    def solve(self, grid_map, map_resolution, time=0.0, target_time=-10.0, dt=0.01, epsilon=0.0001):
+    def solve(
+        self,
+        grid_map,
+        map_resolution,
+        time=0.0,
+        target_time=-10.0,
+        dt=0.01,
+        epsilon=0.0001,
+    ):
         print("Grid map shape:", grid_map.shape) if self.config.print_progress else None
-        print("Domain cells:", self.config.domain_cells) if self.config.print_progress else None
+        (
+            print("Domain cells:", self.config.domain_cells)
+            if self.config.print_progress
+            else None
+        )
 
         if self.last_values is None:
-            print("Computing value function from scratch") if self.config.print_progress else None
+            (
+                print("Computing value function from scratch")
+                if self.config.print_progress
+                else None
+            )
             initial_values = self.compute_initial_values(grid_map, map_resolution)
         else:
-            print("Computing warm-started value function") if self.config.print_progress else None
+            (
+                print("Computing warm-started value function")
+                if self.config.print_progress
+                else None
+            )
             initial_values = self.compute_warm_start_values(grid_map, map_resolution)
 
         self.initial_values = initial_values
@@ -235,7 +334,11 @@ class WarmStartSolver:
 
         if self.problem_definition is None:
             self.problem_definition = self.get_problem_definition(
-                self.config.system_name, self.config.domain, self.config.domain_cells, self.config.mode, self.config.accuracy
+                self.config.system_name,
+                self.config.domain,
+                self.config.domain_cells,
+                self.config.mode,
+                self.config.accuracy,
             )
 
         times = np.linspace(time, target_time, int((-target_time - time) / dt))
@@ -253,7 +356,11 @@ class WarmStartSolver:
                 diff = np.amax(np.abs(values - initial_values))
                 print("diff: ", diff) if self.config.print_progress else None
                 if diff < epsilon:
-                    print("Converged fast, lucky you!") if self.config.print_progress else None
+                    (
+                        print("Converged fast, lucky you!")
+                        if self.config.print_progress
+                        else None
+                    )
                     break
 
             initial_values = values
@@ -262,7 +369,11 @@ class WarmStartSolver:
                 print(f"Current times step: {time} s to {target_time} s")
                 print(f"Max absolute difference between V_prev and V_now = {diff}")
         time_end = time_pkg()
-        print(f"Time taken: {time_end - time_start} seconds") if self.config.print_progress else None
+        (
+            print(f"Time taken: {time_end - time_start} seconds")
+            if self.config.print_progress
+            else None
+        )
 
         self.last_values = values
 
@@ -282,6 +393,63 @@ class WarmStartSolver:
 
         return value > self.config.superlevel_set_epsilon, value, initial_value
 
+    def filter_control_qp(self, current_value, gradient, state, nominal_control):
+        """
+        Filter the nominal control to ensure safety using quadratic programming.
+
+        Args:
+            state: Current state [x, y, theta, v]
+            nominal_control: Nominal control [v, omega]
+
+        Returns:
+            safe_control: Safe control [v, omega] that is closest to nominal_control
+        """
+        # Get the current value and gradient
+
+        # Get the dynamics
+        # A, b = self.get_dynamics(state)
+        A = self.get_dynamics("dubins3d_velocity").control_jacobian(state, 0)
+        b = self.get_dynamics("dubins3d_velocity").open_loop_dynamics(state, 0)
+
+        # Set up the QP problem
+        u = cp.Variable(2)  # Control variables [v, omega]
+
+        # Objective: minimize ||u - u_nominal||^2
+        objective = cp.Minimize(cp.sum_squares(u - nominal_control))
+
+        # Safety constraint: gradient^T * (Ax + Bu) >= -alpha * value
+        # This ensures the system stays within the safe set
+        alpha = 1.0  # Barrier parameter
+        safety_constraint = gradient.T @ (A @ u + b) >= -alpha * current_value
+
+        # Control bounds constraints
+        bound_constraints = [
+            u[0] >= -1.0,
+            u[0] <= 1.0,
+            u[1] >= -4.0,
+            u[1] <= 4.0,
+        ]
+
+        # If already deep in unsafe region, focus on returning to safety
+        if current_value < -0.1:
+            # Maximize the value function growth
+            objective = cp.Maximize(gradient.T @ (A @ u + b))
+
+        # Solve the QP problem
+        constraints = [safety_constraint] + bound_constraints
+        prob = cp.Problem(objective, constraints)
+
+        try:
+            prob.solve()
+
+            if prob.status == "optimal" or prob.status == "optimal_inaccurate":
+                return u.value
+            else:
+                print(f"QP solver status: {prob.status}. Using fallback solution.")
+                return self._fallback_safe_control(state, gradient, A)
+        except Exception as e:
+            print(f"QP solver failed: {e}. Using fallback solution.")
+
     def compute_safe_control(
         self, state, nominal_action, action_bounds, values=None, values_grad=None
     ):
@@ -294,7 +462,11 @@ class WarmStartSolver:
 
         if self.problem_definition is None:
             self.problem_definition = self.get_problem_definition(
-                self.config.system_name, self.config.domain, values.shape, self.config.mode, self.config.accuracy
+                self.config.system_name,
+                self.config.domain,
+                values.shape,
+                self.config.mode,
+                self.config.accuracy,
             )
 
         state = np.array(state)
@@ -306,25 +478,56 @@ class WarmStartSolver:
 
         if not is_safe:
             print(f"\033[31mSafe controller intervening. Value is {value}\033[0m")
-
             state_ind = self._state_to_grid(state)
 
-            grad_x = values_grad[0][state_ind[0], state_ind[1], state_ind[2]]
-            grad_y = values_grad[1][state_ind[0], state_ind[1], state_ind[2]]
-            grad_theta = values_grad[2][state_ind[0], state_ind[1], state_ind[2]]
+            # safe_action = self.filter_control_qp(
+            #     value,
+            #     np.array(values_grad)[:, *state_ind],
+            #     state,
+            #     nominal_action,
+            # )
+
+
+
+
+            grad_x = values_grad[0][*state_ind]
+            grad_y = values_grad[1][*state_ind]
+            grad_theta = values_grad[2][*state_ind]
+            grad_velocity = values_grad[3][*state_ind] if len(values_grad) > 3 else 0
 
             # TODO: Replace temporal straight forward solution
-            N_samples = 1000
+            N_samples = 100
             w_samples = np.linspace(action_bounds[1][0], action_bounds[1][1], N_samples)
+            v_samples = np.linspace(action_bounds[0][0], action_bounds[0][1], N_samples)
 
-            opt_problem = lambda w: 0.5 * np.cos(state[2]) * grad_x + 0.5 * np.sin(state[2]) * grad_y + grad_theta * w
+            # Create meshgrid for joint optimization
+            W, V = np.meshgrid(w_samples, v_samples)
 
-            w_opt_ind = np.argmax(opt_problem(w_samples))
+            # Define the optimization objective for both controls
+            # v affects x and y dynamics, w affects theta
+            def opt_problem(v, w):
+                return (
+                    v * np.cos(state[2]) * grad_x
+                    + v * np.sin(state[2]) * grad_y
+                    + grad_theta * w
+                    + grad_velocity * 0
+                )  # Assuming velocity doesn't directly affect its own derivative
+
+            # Evaluate objective across the grid
+            objective_values = opt_problem(V, W)
+
+            # Find the indices of the maximum value
+            optimal_indices = np.unravel_index(
+                np.argmax(objective_values), objective_values.shape
+            )
+            v_opt_ind, w_opt_ind = optimal_indices
+
+            # Get the optimal controls
+            v_opt = v_samples[v_opt_ind]
             w_opt = w_samples[w_opt_ind]
-            safe_w = w_opt
 
-            action = np.array([nominal_action[0], safe_w])
-            print("Safe action: ", action)
+            action = np.array([v_opt, w_opt])
+            print("Safe action: linear_vel={v_opt}, angular_vel={w_opt}")
         else:
             print("\033[32m{}\033[0m".format("Safe controller not intervening"))
 
@@ -348,8 +551,16 @@ class WarmStartSolver:
             ax = fig.add_subplot(111)
 
         if grid_map is not None:
-            x = np.linspace(self.config.domain[0][0], self.config.domain[1][0], self.config.domain_cells[0])
-            y = np.linspace(self.config.domain[0][1], self.config.domain[1][1], self.config.domain_cells[1])
+            x = np.linspace(
+                self.config.domain[0][0],
+                self.config.domain[1][0],
+                self.config.domain_cells[0],
+            )
+            y = np.linspace(
+                self.config.domain[0][1],
+                self.config.domain[1][1],
+                self.config.domain_cells[1],
+            )
 
             # Create the meshgrid
             x, y = np.meshgrid(x, y)
@@ -357,14 +568,22 @@ class WarmStartSolver:
             # Plot the data
             plt.pcolormesh(x, y, grid_map, shading="auto", cmap="gray")
 
-        x = np.linspace(self.config.domain[0][0], self.config.domain[1][0], self.config.domain_cells[0])
-        y = np.linspace(self.config.domain[0][1], self.config.domain[1][1], self.config.domain_cells[1])
+        x = np.linspace(
+            self.config.domain[0][0],
+            self.config.domain[1][0],
+            self.config.domain_cells[0],
+        )
+        y = np.linspace(
+            self.config.domain[0][1],
+            self.config.domain[1][1],
+            self.config.domain_cells[1],
+        )
 
         x, y = np.meshgrid(x, y)
         z = grid_data
 
         # plot all contours
-        contour_all = plt.contour(x, y, z, levels=20, cmap='viridis')
+        contour_all = plt.contour(x, y, z, levels=20, cmap="viridis")
         plt.clabel(contour_all, inline=True, fontsize=8)
 
         # plot the 0-level set in red
@@ -380,4 +599,3 @@ class WarmStartSolver:
         # plt.gca().set_aspect('equal')
 
         plt.close(fig)
-

@@ -25,9 +25,9 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
-    world="30x30OneWallDiagonal",
+    # world="30x30OneWallDiagonal",
     # world="14x14Empty",
-    # world="30x30Empty",
+    world="30x30Empty",
     # world="30x30ScatteredObstacleField",
     # world="14x14Sparse",
     num_agents=1,
@@ -40,7 +40,7 @@ env = posggym.make(
 # BRT 
 ANGLE_MIN = 0
 ANGLE_MAX = 2 * np.pi
-ANGLE_NUM_CELLS = 30
+ANGLE_NUM_CELLS = 20
 VELOCITY_MIN = -1.0
 VELOCITY_MAX = 1.0
 VELOCITY_NUM_CELLS = 5
@@ -826,7 +826,7 @@ def main():
             safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
                 mppi_action,
-                action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
+                action_bounds=np.array([[VELOCITY_MIN, VELOCITY_MAX], [-4.0, 4.0]]),
                 values=values,
             )
 
@@ -1018,8 +1018,6 @@ def visualize_hj_level_set(
 
     # Add timestamp and safety status
     timestamp = f"Time: {time.time():.1f}s"
-    safety_status = "SAFETY ACTIVE" if safety_intervening else "NOMINAL CONTROL"
-    status_color = "cyan" if safety_intervening else "green"
 
     # Add timestamp at bottom left
     ax.text(
@@ -1030,20 +1028,6 @@ def visualize_hj_level_set(
         fontsize=10,
         verticalalignment="bottom",
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
-    )
-
-    # Add safety status at top right
-    ax.text(
-        0.98,
-        0.98,
-        safety_status,
-        transform=ax.transAxes,
-        fontsize=12,
-        color=status_color,
-        weight="bold",
-        horizontalalignment="right",
-        verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),
     )
 
     # Show the plot without blocking
