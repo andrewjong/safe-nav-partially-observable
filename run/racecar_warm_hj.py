@@ -26,8 +26,8 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
-    world="30x30OneWall",
-    # world="14x14Empty",
+    # world="30x30OneWall",
+    world="14x14Empty",
     # world="30x30Empty",
     # world="30x30ScatteredObstacleField",
     # world="14x14Sparse",
@@ -92,7 +92,7 @@ class OccupancyMap:
         self.map_img = None
         self.robot_marker = None
         self.lidar_lines = []
-        
+
         # MPPI visualization variables
         self.continuous_fig = None
         self.continuous_ax = None
@@ -125,7 +125,7 @@ class OccupancyMap:
             self.map_img = None
             self.robot_marker = None
             self.lidar_lines = []
-        
+
         # Reset continuous figure elements without closing the window
         if self.continuous_fig is not None:
             # Clear previous trajectory lines
@@ -133,33 +133,42 @@ class OccupancyMap:
                 if line in self.continuous_ax.lines:
                     line.remove()
             self.continuous_mppi_lines = []
-            
+
             # Clear chosen trajectory line
-            if self.continuous_chosen_line is not None and self.continuous_chosen_line in self.continuous_ax.lines:
+            if (
+                self.continuous_chosen_line is not None
+                and self.continuous_chosen_line in self.continuous_ax.lines
+            ):
                 self.continuous_chosen_line.remove()
                 self.continuous_chosen_line = None
-            
+
             # Clear robot marker and orientation arrow
-            if self.continuous_robot_marker is not None and self.continuous_robot_marker in self.continuous_ax.lines:
+            if (
+                self.continuous_robot_marker is not None
+                and self.continuous_robot_marker in self.continuous_ax.lines
+            ):
                 self.continuous_robot_marker.remove()
                 self.continuous_robot_marker = None
-            
+
             if self.continuous_orientation_arrow is not None:
                 self.continuous_orientation_arrow.remove()
                 self.continuous_orientation_arrow = None
-            
+
             # Clear goal marker
-            if self.goal_marker is not None and self.goal_marker in self.continuous_ax.lines:
+            if (
+                self.goal_marker is not None
+                and self.goal_marker in self.continuous_ax.lines
+            ):
                 self.goal_marker.remove()
                 self.goal_marker = None
-            
+
             # Reset the grid data
             if self.continuous_occupancy_img is not None:
                 self.continuous_occupancy_img.set_data(self.grid)
-            
+
             # Reset legend state
             self.legend_added = False
-            
+
             # Redraw the figure
             if self.continuous_fig.canvas is not None:
                 self.continuous_fig.canvas.draw_idle()
@@ -362,7 +371,7 @@ class OccupancyMap:
     def initialize_plot(self):
         """
         Initialize the matplotlib figure for visualization.
-        
+
         Note: This method is deprecated and kept for compatibility.
         The MPPI visualization with occupancy map is now used instead.
         """
@@ -412,7 +421,7 @@ class OccupancyMap:
     def update_plot(self):
         """
         Update the matplotlib visualization with current map data.
-        
+
         Note: This method is deprecated and kept for compatibility.
         The MPPI visualization with occupancy map is now used instead.
         """
@@ -490,9 +499,11 @@ class OccupancyMap:
         # Create figure for visualization with occupancy map and MPPI trajectories if it doesn't exist
         if not hasattr(self, "continuous_fig") or self.continuous_fig is None:
             # Create a new figure with a unique number to avoid conflicts
-            self.continuous_fig, self.continuous_ax = plt.subplots(figsize=(8, 8), num="MPPI Visualization")
+            self.continuous_fig, self.continuous_ax = plt.subplots(
+                figsize=(8, 8), num="MPPI Visualization"
+            )
             plt.ion()  # Enable interactive mode
-            
+
             # Set up the axes
             self.continuous_ax.set_xlabel("X (world units)")
             self.continuous_ax.set_ylabel("Y (world units)")
@@ -517,18 +528,21 @@ class OccupancyMap:
             self.continuous_mppi_lines = []
             self.continuous_chosen_line = None
             self.continuous_robot_marker = None
-            
+
             # Make sure the figure is visible
             self.continuous_fig.canvas.draw()
             plt.pause(0.001)
-            
+
         # Clear previous trajectory lines in continuous space
         for line in self.continuous_mppi_lines:
             if line in self.continuous_ax.lines:
                 line.remove()
         self.continuous_mppi_lines = []
 
-        if self.continuous_chosen_line is not None and self.continuous_chosen_line in self.continuous_ax.lines:
+        if (
+            self.continuous_chosen_line is not None
+            and self.continuous_chosen_line in self.continuous_ax.lines
+        ):
             self.continuous_chosen_line.remove()
             self.continuous_chosen_line = None
 
@@ -646,7 +660,7 @@ class OccupancyMap:
         if self.continuous_fig.canvas is not None:
             self.continuous_fig.canvas.draw_idle()
             plt.pause(0.001)
-        
+
         # Removed call to update_plot() - we're only using the MPPI visualization
 
 
@@ -657,22 +671,22 @@ def main():
     MAP_HEIGHT = env.model.state_space[0][0].high[1]
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
-    solver = WarmStartSolver(
-        config=WarmStartSolverConfig(
-            system_name="dubins3d",
-            domain_cells=[
-                int(MAP_WIDTH / MAP_RESOLUTION),
-                int(MAP_HEIGHT / MAP_RESOLUTION),
-                30,
-            ],
-            domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2 * np.pi]],
-            mode="brt",
-            accuracy="medium",
-            converged_values=None,
-            until_convergent=True,
-            print_progress=True,
-        )
+    config = WarmStartSolverConfig(
+        system_name="dubins3d",
+        domain_cells=[
+            int(MAP_WIDTH / MAP_RESOLUTION),
+            int(MAP_HEIGHT / MAP_RESOLUTION),
+            30,
+        ],
+        domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2 * np.pi]],
+        mode="brt",
+        accuracy="medium",
+        converged_values=None,
+        until_convergent=True,
+        print_progress=False,
     )
+
+    solver = WarmStartSolver(config=config)
 
     occupancy_map = OccupancyMap(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
 
@@ -712,6 +726,7 @@ def main():
         # Removed redundant update_plot() call - we'll only use the MPPI visualization
 
         initial_safe_set = occupancy_map.grid == occupancy_map.FREE
+        # initial_safe_set = np.ones_like(initial_safe_set, dtype=bool)
 
         # compute a nominal action via MPPI
 
@@ -755,8 +770,10 @@ def main():
         )
 
         # # now compute HJ reachability
-        values = solver.solve(initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001)
-        
+        values = solver.solve(
+            initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
+        )
+
         # Visualize the HJ reachability level set
         if values is not None:
             # Compute safe action
@@ -766,13 +783,18 @@ def main():
                 action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
                 values=values,
             )
-            
+
             # Visualize with safety status
             fail_set = np.logical_not(initial_safe_set)
             visualize_hj_level_set(
-                values, fail_set, occupancy_map, 
-                vehicle_x, vehicle_y, vehicle_angle, 
-                solver, safety_intervening=has_intervened
+                values,
+                fail_set,
+                occupancy_map,
+                vehicle_x,
+                vehicle_y,
+                vehicle_angle,
+                solver,
+                safety_intervening=has_intervened,
             )
         else:
             safe_mppi_action = mppi_action
@@ -789,10 +811,13 @@ def main():
         )  # Get current velocity magnitude
 
         dvel = safe_mppi_action[0] - current_vel
-        dvel = current_vel - safe_mppi_action[0]
+        print(dvel)
+        # dvel = current_vel - safe_mppi_action[0]
 
         # Convert the action to the environment's format, which is [dyaw, dvel]. Whereas our controller code outputs [linear_vel, angular_vel]
-        posggym_action = np.array([safe_mppi_action[1], dvel])  # dyaw = angular_vel * dt, dvel
+        posggym_action = np.array(
+            [safe_mppi_action[1], dvel]
+        )  # dyaw = angular_vel * dt, dvel
         # Action conversion complete
         observations, rewards, terminations, truncations, all_done, infos = env.step(
             {"0": posggym_action}
@@ -803,32 +828,26 @@ def main():
         if all_done:
             observations, infos = env.reset()
             occupancy_map.reset()
-            solver = WarmStartSolver(
-                config=WarmStartSolverConfig(
-                    system_name="dubins3d",
-                    domain_cells=[
-                        int(MAP_WIDTH / MAP_RESOLUTION),
-                        int(MAP_HEIGHT / MAP_RESOLUTION),
-                        30,
-                    ],
-                    domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2 * np.pi]],
-                    mode="brt",
-                    accuracy="medium",
-                    converged_values=None,
-                    until_convergent=True,
-                    print_progress=True,
-                )
-    )
+            solver = WarmStartSolver(config=config)
 
     env.close()
     plt.ioff()  # Turn off interactive mode when done
     plt.show()  # Show the final plot
 
 
-def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y, vehicle_angle, solver, safety_intervening=False):
+def visualize_hj_level_set(
+    values,
+    fail_set,
+    occupancy_map,
+    vehicle_x,
+    vehicle_y,
+    vehicle_angle,
+    solver,
+    safety_intervening=False,
+):
     """
     Visualize the HJ reachability level set on a separate heat map plot.
-    
+
     Args:
         values (np.ndarray): The value function from HJ reachability computation
         fail_set (np.ndarray): The fail set (obstacles)
@@ -843,107 +862,148 @@ def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y
     hj_fig = None
     for i in plt.get_fignums():
         fig = plt.figure(i)
-        if hasattr(fig, 'hj_visualization') and fig.hj_visualization:
+        if hasattr(fig, "hj_visualization") and fig.hj_visualization:
             hj_fig = fig
             plt.figure(hj_fig.number)
             plt.clf()
             break
-    
+
     # Create a new figure if none exists
     if hj_fig is None:
         hj_fig = plt.figure(figsize=(10, 8))
         hj_fig.hj_visualization = True
-    
+
     ax = hj_fig.add_subplot(111)
-    
+
     # Get the current slice of the value function at the current vehicle angle
-    angle_index = min(int((vehicle_angle % (2 * np.pi)) / (2 * np.pi) * (values.shape[2] - 1)), values.shape[2] - 1)
-    value_slice = np.array(values[:, :, angle_index])  # Convert to numpy array if it's a JAX array
-    
+    angle_index = min(
+        int((vehicle_angle % (2 * np.pi)) / (2 * np.pi) * (values.shape[2] - 1)),
+        values.shape[2] - 1,
+    )
+    value_slice = np.array(
+        values[:, :, angle_index]
+    )  # Convert to numpy array if it's a JAX array
+
     # Create coordinate meshgrid for plotting
     x = np.linspace(0, occupancy_map.width, occupancy_map.grid_width)
     y = np.linspace(0, occupancy_map.height, occupancy_map.grid_height)
     X, Y = np.meshgrid(x, y)
-    
+
     # Plot the occupancy map as background
-    occupancy_cmap = plt.cm.colors.ListedColormap(['black', 'white', 'gray'])
+    occupancy_cmap = plt.cm.colors.ListedColormap(["black", "white", "gray"])
     occupancy_bounds = [-0.5, 0.5, 1.5, 2.5]
     occupancy_norm = plt.cm.colors.BoundaryNorm(occupancy_bounds, occupancy_cmap.N)
-    ax.pcolormesh(X, Y, occupancy_map.grid, cmap=occupancy_cmap, norm=occupancy_norm, alpha=0.3)
-    
+    ax.pcolormesh(
+        X, Y, occupancy_map.grid, cmap=occupancy_cmap, norm=occupancy_norm, alpha=0.3
+    )
+
     # Plot the value function as a heat map
     # Clip the values to a reasonable range for better visualization
     min_val, max_val = np.min(value_slice), np.max(value_slice)
     value_range = max_val - min_val
     vmin, vmax = min_val - 0.1 * value_range, max_val + 0.1 * value_range
-    # 
-    value_contour = ax.contourf(X, Y, value_slice, levels=20, cmap='viridis', alpha=0.7, vmin=vmin, vmax=vmax)
-    cbar = plt.colorbar(value_contour, ax=ax, label='Value Function')
-    
+    #
+    value_contour = ax.contourf(
+        X, Y, value_slice, levels=20, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax
+    )
+    cbar = plt.colorbar(value_contour, ax=ax, label="Value Function")
+
     # Plot the zero level set (boundary of unsafe set)
     try:
-        unsafe_boundary = ax.contour(X, Y, value_slice, levels=[0], colors='red', linewidths=2)
-        ax.clabel(unsafe_boundary, inline=True, fontsize=10, fmt='Unsafe')
+        unsafe_boundary = ax.contour(
+            X, Y, value_slice, levels=[0], colors="red", linewidths=2
+        )
+        ax.clabel(unsafe_boundary, inline=True, fontsize=10, fmt="Unsafe")
     except:
         print("Could not plot unsafe boundary - no zero level set found")
-    
+
     # Plot the fail set boundary
     try:
         # Convert fail_set to numpy array if it's not already
         fail_set_np = np.array(fail_set)
-        fail_boundary = ax.contour(X, Y, fail_set_np, levels=[0.5], colors='black', linewidths=2)
-        ax.clabel(fail_boundary, inline=True, fontsize=10, fmt='Fail')
+        fail_boundary = ax.contour(
+            X, Y, fail_set_np, levels=[0.5], colors="black", linewidths=2
+        )
+        ax.clabel(fail_boundary, inline=True, fontsize=10, fmt="Fail")
     except:
         print("Could not plot fail set boundary")
-    
+
     # Plot the vehicle position with color based on safety intervention
-    robot_color = 'cyan' if safety_intervening else 'red'
-    robot_label = 'Vehicle (Safety Active)' if safety_intervening else 'Vehicle (Nominal)'
-    ax.plot(vehicle_x, vehicle_y, 'o', color=robot_color, markersize=10, label=robot_label)
-    
+    robot_color = "cyan" if safety_intervening else "red"
+    robot_label = (
+        "Vehicle (Safety Active)" if safety_intervening else "Vehicle (Nominal)"
+    )
+    ax.plot(
+        vehicle_x, vehicle_y, "o", color=robot_color, markersize=10, label=robot_label
+    )
+
     # Add an arrow to show vehicle orientation
     arrow_length = 1.0
     dx = arrow_length * np.cos(vehicle_angle)
     dy = arrow_length * np.sin(vehicle_angle)
-    ax.arrow(vehicle_x, vehicle_y, dx, dy, head_width=0.3, head_length=0.5, 
-             fc=robot_color, ec=robot_color)
-    
+    ax.arrow(
+        vehicle_x,
+        vehicle_y,
+        dx,
+        dy,
+        head_width=0.3,
+        head_length=0.5,
+        fc=robot_color,
+        ec=robot_color,
+    )
+
     # Set plot title and labels
-    ax.set_title('HJ Reachability Level Set Visualization')
-    ax.set_xlabel('X Position')
-    ax.set_ylabel('Y Position')
-    
+    ax.set_title("HJ Reachability Level Set Visualization")
+    ax.set_xlabel("X Position")
+    ax.set_ylabel("Y Position")
+
     # Add legend
-    ax.legend(loc='upper right')
-    
+    ax.legend(loc="upper right")
+
     # Set equal aspect ratio
-    ax.set_aspect('equal')
-    
+    ax.set_aspect("equal")
+
     # Invert y-axis to have (0,0) in the top left
     ax.invert_yaxis()
-    
+
     # Set axis limits to match the occupancy map dimensions
     ax.set_xlim(0, occupancy_map.width)
     ax.set_ylim(occupancy_map.height, 0)  # Inverted y-axis
-    
+
     # Add timestamp and safety status
     timestamp = f"Time: {time.time():.1f}s"
     safety_status = "SAFETY ACTIVE" if safety_intervening else "NOMINAL CONTROL"
     status_color = "cyan" if safety_intervening else "green"
-    
+
     # Add timestamp at bottom left
-    ax.text(0.02, 0.02, timestamp, transform=ax.transAxes, fontsize=10, 
-            verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
-    
+    ax.text(
+        0.02,
+        0.02,
+        timestamp,
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="bottom",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
+    )
+
     # Add safety status at top right
-    ax.text(0.98, 0.98, safety_status, transform=ax.transAxes, fontsize=12, 
-            color=status_color, weight='bold',
-            horizontalalignment='right', verticalalignment='top', 
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
-    
+    ax.text(
+        0.98,
+        0.98,
+        safety_status,
+        transform=ax.transAxes,
+        fontsize=12,
+        color=status_color,
+        weight="bold",
+        horizontalalignment="right",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.7),
+    )
+
     # Show the plot without blocking
     hj_fig.canvas.draw_idle()
     plt.pause(0.001)
+
 
 if __name__ == "__main__":
     main()

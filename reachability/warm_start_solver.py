@@ -67,6 +67,41 @@ class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
             [0., 0.],
         ])
 
+class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
+    def __init__(self,
+                 max_turn_rate=1.,
+                 control_mode="max",
+                 disturbance_mode="min",
+                 control_space=None,
+                 disturbance_space=None):
+        # Note: Removed self.speed as velocity is now part of the state
+        if control_space is None:
+            control_space = sets.Box(jnp.array([-max_turn_rate]), jnp.array([max_turn_rate]))
+        if disturbance_space is None:
+            disturbance_space = sets.Box(jnp.array([0, 0, 0]), jnp.array([0, 0, 0]))
+        super().__init__(control_mode, disturbance_mode, control_space, disturbance_space)
+    
+    def open_loop_dynamics(self, state, time):
+        x, y, psi, v = state  # State now includes velocity v
+        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0., 0.])
+    
+    def control_jacobian(self, state, time):
+        x, y, psi, v = state  # Updated to unpack 4 state variables
+        return jnp.array([
+            [0],
+            [0],
+            [1],
+            [0],  # No direct control on velocity
+        ])
+    
+    def disturbance_jacobian(self, state, time):
+        return jnp.array([
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0., 0., 0.],
+            [0., 0., 1.],  # Added disturbance channel for velocity
+        ])
+
 class WarmStartSolver:
     def __init__(
         self,
@@ -160,7 +195,8 @@ class WarmStartSolver:
         """
         if self.config.system_name == "dubins3d":
             initial_values = grid_map - 0.5 # offset to make sure the distance is 0 at the border
-            initial_values = skfmm.distance(initial_values, dx=dx)
+            if np.any(initial_values == 0):
+                initial_values = skfmm.distance(initial_values, dx=dx)
             initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
             # distance_transform_free = distance_transform_edt(grid_map == 1)
             # distance_transform_obs = distance_transform_edt(grid_map != 1)
@@ -220,7 +256,7 @@ class WarmStartSolver:
                 diff = np.amax(np.abs(values - initial_values))
                 print("diff: ", diff) if self.config.print_progress else None
                 if diff < epsilon:
-                    print("Converged fast, lucky you!")
+                    print("Converged fast, lucky you!") if self.config.print_progress else None
                     break
 
             initial_values = values
@@ -350,69 +386,3 @@ class WarmStartSolver:
 
         plt.close(fig)
 
-
-
-
-if __name__ == "__main__":
-    params = FailureMapParams(x_size=100, y_size=100, resolution=1, map_rule_type='threshold', map_rule_threshold=0.7)
-    builder = GPFailureMapBuilder(params)
-
-    x_size, y_size = 80, 50
-
-    smoke_blob_params = [
-        SmokeBlobParams(x_pos=10, y_pos=40, intensity=2.0, spread_rate=4.0),
-        SmokeBlobParams(x_pos=10, y_pos=20, intensity=1.5, spread_rate=5.0),
-        SmokeBlobParams(x_pos=60, y_pos=20, intensity=2.0, spread_rate=3.0),
-        SmokeBlobParams(x_pos=50, y_pos=10, intensity=1.5, spread_rate=5.0),
-    ]
-
-    smoke_simulator = StaticSmoke(x_size=x_size, y_size=y_size, resolution=0.1, smoke_blob_params=smoke_blob_params)
-
-    gp = GaussianProcess()
-
-    sample_size = 50
-
-    for i in range(sample_size):
-        X_sample = np.concatenate([np.random.uniform(0, y_size, 1), np.random.uniform(0, x_size, 1)])
-        y_observe = smoke_simulator.get_smoke_density(X_sample[1], X_sample[0])
-        gp.track_data(X_sample, y_observe)
-    gp.update()
-
-    first_failure_map = builder.build_map(gp)
-    builder.plot_failure_map()
-
-    sample_size = 200
-
-    for i in range(sample_size):
-        X_sample = np.concatenate([np.random.uniform(0, y_size, 1), np.random.uniform(0, x_size, 1)])
-        y_observe = smoke_simulator.get_smoke_density(X_sample[1], X_sample[0])
-        gp.track_data(X_sample, y_observe)
-    gp.update()
-
-    second_failure_map = builder.build_map(gp)
-    builder.plot_failure_map()
-    last_semantic_map = np.zeros((100, 100))
-    if last_semantic_map.ndim != 2:
-        raise ValueError("Last semantic map must be 2D")
-
-
-    solver = WarmStartSolver(
-        config=WarmStartSolverConfig(
-            system_name="dubins3d",
-            domain_cells=[100, 100, 100],
-            domain=[[-10, -10, 0], [10, 10, 2*np.pi]],
-            mode="brt",
-            accuracy="low",
-            converged_values=None,
-            until_convergent=True,
-            print_progress=True,
-        )
-    )
-
-    first_values = solver.solve(first_failure_map, target_time=-3.0, dt=0.1, epsilon=0.0001)
-
-    second_values = solver.solve(second_failure_map, target_time=-3.0, dt=0.1, epsilon=0.0001)
-
-    # nominal_action = [0.5, 0.4]
-    # safe_action = solver.compute_safe_control([-8, -6, 0.3], nominal_action)
-    # print(safe_action)
