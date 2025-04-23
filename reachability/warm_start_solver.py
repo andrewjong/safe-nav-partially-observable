@@ -195,15 +195,8 @@ class WarmStartSolver:
         """
         if self.config.system_name == "dubins3d":
             initial_values = grid_map - 0.5 # offset to make sure the distance is 0 at the border
-            if np.any(initial_values == 0):
-                initial_values = skfmm.distance(initial_values, dx=dx)
+            initial_values = skfmm.distance(initial_values, dx=dx)
             initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
-            # distance_transform_free = distance_transform_edt(grid_map == 1)
-            # distance_transform_obs = distance_transform_edt(grid_map != 1)
-            # for free space, take transform_free, otherwise transform_obs
-            # distance_transform = np.where(grid_map == 1, distance_transform_free, -distance_transform_obs)
-            # initial_values = distance_transform
-            # initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
             return initial_values
         else:
             raise NotImplementedError(f"System {self.config.system_name} not implemented")
@@ -219,9 +212,6 @@ class WarmStartSolver:
         return target_values
 
     def solve(self, grid_map, map_resolution, time=0.0, target_time=-10.0, dt=0.01, epsilon=0.0001):
-        if grid_map is None:
-            print("Cannot solve because grid map was not provided yet")
-            return None, None
         print("Grid map shape:", grid_map.shape) if self.config.print_progress else None
         print("Domain cells:", self.config.domain_cells) if self.config.print_progress else None
 
@@ -246,8 +236,6 @@ class WarmStartSolver:
         print("Starting BRT computation") if self.config.print_progress else None
         time_start = time_pkg()
         for i in range(1, len(times)):
-            values = initial_values
-            break
             time = times[i - 1]
             target_time = times[i]
             values = self.step(
@@ -312,7 +300,7 @@ class WarmStartSolver:
         has_intervened = not is_safe
 
         if not is_safe:
-            print("\033[31m{}\033[0m".format("Safe controller intervening. Value is:"))
+            print(f"\033[31mSafe controller intervening. Value is {value}\033[0m")
 
             state_ind = self._state_to_grid(state)
 

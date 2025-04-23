@@ -11,8 +11,6 @@ from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfi
 from src.mppi import Navigator, dubins_dynamics_tensor
 
 
-MAP_WIDTH = 30
-MAP_HEIGHT = 30
 MAP_RESOLUTION = 1.0  # units per cell
 
 N_SENSORS = 16
@@ -26,8 +24,8 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
-    # world="30x30OneWall",
-    world="14x14Empty",
+    world="30x30OneWallDiagonal",
+    # world="14x14Empty",
     # world="30x30Empty",
     # world="30x30ScatteredObstacleField",
     # world="14x14Sparse",
@@ -173,6 +171,43 @@ class OccupancyMap:
             if self.continuous_fig.canvas is not None:
                 self.continuous_fig.canvas.draw_idle()
                 plt.pause(0.001)
+
+    def mark_free_radius(self, robot_x, robot_y, radius):
+        """
+        Mark cells within a specified radius of the robot's position as FREE.
+        
+        This is useful for initializing the map with known free space around
+        the robot's starting position.
+        
+        Args:
+            robot_x (float): Robot's x-coordinate in world units
+            robot_y (float): Robot's y-coordinate in world units
+            radius (float): Radius around the robot to mark as free, in world units
+        """
+        # Convert radius to grid units
+        radius_grid = int(np.ceil(radius / self.resolution))
+        
+        # Get the robot's position in grid coordinates
+        center_row, center_col = self.world_to_grid(robot_x, robot_y)
+        
+        # Determine the bounds of the circle in grid coordinates
+        min_row = max(0, center_row - radius_grid)
+        max_row = min(self.grid_height - 1, center_row + radius_grid)
+        min_col = max(0, center_col - radius_grid)
+        max_col = min(self.grid_width - 1, center_col + radius_grid)
+        
+        # Mark all cells within the radius as FREE
+        for row in range(min_row, max_row + 1):
+            for col in range(min_col, max_col + 1):
+                # Calculate squared distance from center
+                dr = row - center_row
+                dc = col - center_col
+                dist_squared = dr * dr + dc * dc
+                
+                # If the cell is within the radius, mark it as FREE
+                if dist_squared <= radius_grid * radius_grid:
+                    self.grid[row, col] = self.FREE
+
 
     def world_to_grid(self, x, y):
         """
@@ -663,22 +698,19 @@ class OccupancyMap:
 
         # Removed call to update_plot() - we're only using the MPPI visualization
 
-
 def main():
-
-    global MAP_WIDTH, MAP_HEIGHT
-    MAP_WIDTH = env.model.state_space[0][0].high[0]
-    MAP_HEIGHT = env.model.state_space[0][0].high[1]
+    map_width = env.model.state_space[0][0].high[0]
+    map_height = env.model.state_space[0][0].high[1]
 
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
     config = WarmStartSolverConfig(
         system_name="dubins3d",
         domain_cells=[
-            int(MAP_WIDTH / MAP_RESOLUTION),
-            int(MAP_HEIGHT / MAP_RESOLUTION),
+            int(map_width / MAP_RESOLUTION),
+            int(map_height / MAP_RESOLUTION),
             30,
         ],
-        domain=[[0, 0, 0], [MAP_WIDTH, MAP_HEIGHT, 2 * np.pi]],
+        domain=[[0, 0, 0], [map_width, map_height, 2 * np.pi]],
         mode="brt",
         accuracy="medium",
         converged_values=None,
@@ -688,7 +720,7 @@ def main():
 
     solver = WarmStartSolver(config=config)
 
-    occupancy_map = OccupancyMap(MAP_WIDTH, MAP_HEIGHT, MAP_RESOLUTION)
+    occupancy_map = OccupancyMap(map_width, map_height, MAP_RESOLUTION)
 
     observations, infos = env.reset()
     lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
@@ -697,6 +729,7 @@ def main():
         observations["0"][2 * N_SENSORS + 1],
         observations["0"][2 * N_SENSORS + 2],
     )
+    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 4.0)
 
     # Initialize Navigator with the agent radius from the environment
     nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
@@ -714,8 +747,6 @@ def main():
         vehicle_y_velocity = observation[2 * N_SENSORS + 4]
         # Note: goal distance is now at indices 2*N_SENSORS + 5 and 2*N_SENSORS + 6
         env.render()
-
-        # Debug information removed
 
         # update the fail set from the lidar observations. cells that are free are marked as safe.
         # assumes the lidar observations are equally spaced from 0 to 2*pi
@@ -812,12 +843,9 @@ def main():
 
         dvel = safe_mppi_action[0] - current_vel
         print(dvel)
-        # dvel = current_vel - safe_mppi_action[0]
 
         # Convert the action to the environment's format, which is [dyaw, dvel]. Whereas our controller code outputs [linear_vel, angular_vel]
-        posggym_action = np.array(
-            [safe_mppi_action[1], dvel]
-        )  # dyaw = angular_vel * dt, dvel
+        posggym_action = np.array( [safe_mppi_action[1], dvel])  
         # Action conversion complete
         observations, rewards, terminations, truncations, all_done, infos = env.step(
             {"0": posggym_action}
@@ -828,6 +856,13 @@ def main():
         if all_done:
             observations, infos = env.reset()
             occupancy_map.reset()
+            lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
+                observations["0"][0:N_SENSORS],
+                observations["0"][2 * N_SENSORS],
+                observations["0"][2 * N_SENSORS + 1],
+                observations["0"][2 * N_SENSORS + 2],
+            )
+            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 4.0)
             solver = WarmStartSolver(config=config)
 
     env.close()
