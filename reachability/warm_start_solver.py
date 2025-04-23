@@ -143,7 +143,7 @@ class WarmStartSolver:
             )
 
     def get_dynamics(self, system_name: str, **kwargs):
-        systems = ["dubins3d"]
+        systems = ["dubins3d", "dubins3d_velocity"]
         if system_name not in systems:
             print(f"'system' has to be one of {systems}")
 
@@ -151,6 +151,8 @@ class WarmStartSolver:
         # unfortunately, meanwhile you will have to implement this yourself in the toolbox too.
         if system_name == "dubins3d":
             return Dubins3D()
+        elif system_name == "dubins3d_velocity":
+            return Dubins3DVelocity()
 
     def get_domain_grid(self, domain, domain_cells):
         """
@@ -159,8 +161,8 @@ class WarmStartSolver:
         """
         grid = hj.Grid.from_lattice_parameters_and_boundary_conditions(
             hj.sets.Box(
-                np.array([domain[0][0], domain[0][1], domain[0][2]]),
-                np.array([domain[1][0], domain[1][1], domain[1][2]]),
+                np.array(domain[0, :]),
+                np.array(domain[1, :]),
             ),
             tuple(domain_cells),
             periodic_dims=2,
@@ -197,6 +199,11 @@ class WarmStartSolver:
             initial_values = grid_map - 0.5 # offset to make sure the distance is 0 at the border
             initial_values = skfmm.distance(initial_values, dx=dx)
             initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
+            return initial_values
+        elif self.config.system_name == "dubins3d_velocity":
+            initial_values = grid_map - 0.5
+            initial_values = skfmm.distance(initial_values, dx=dx)
+            initial_values = np.tile(initial_values[:, :, np.newaxis, np.newaxis], (1, 1, self.config.domain_cells[2], self.config.domain_cells[3]))
             return initial_values
         else:
             raise NotImplementedError(f"System {self.config.system_name} not implemented")
@@ -267,11 +274,9 @@ class WarmStartSolver:
         """
         # TODO: modify for other systems
         state_ind = self._state_to_grid(state)
-        value = values[state_ind[0], state_ind[1], state_ind[2]]
+        value = values[*state_ind]
         try:
-            initial_value = self.initial_values[
-                state_ind[0], state_ind[1], state_ind[2]
-            ]
+            initial_value = self.initial_values[*state_ind]
         except TypeError as e:
             initial_value = None
 

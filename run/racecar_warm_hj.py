@@ -8,9 +8,10 @@ import posggym
 
 # Comment out reachability import since we're focusing on MPPI visualization
 from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfig
-from src.mppi import Navigator, dubins_dynamics_tensor
+from src.mppi import Navigator
 
 
+# ENVIRONMENT SETUP
 MAP_RESOLUTION = 1.0  # units per cell
 
 N_SENSORS = 16
@@ -35,6 +36,14 @@ env = posggym.make(
     fov=FOV,
     render_mode="human",
 )
+
+# BRT 
+ANGLE_MIN = 0
+ANGLE_MAX = 2 * np.pi
+ANGLE_NUM_CELLS = 30
+VELOCITY_MIN = -1.0
+VELOCITY_MAX = 1.0
+VELOCITY_NUM_CELLS = 5
 
 
 class OccupancyMap:
@@ -702,15 +711,17 @@ def main():
     map_width = env.model.state_space[0][0].high[0]
     map_height = env.model.state_space[0][0].high[1]
 
+
     # Comment out WarmStartSolver since we're focusing on MPPI visualization
     config = WarmStartSolverConfig(
-        system_name="dubins3d",
+        system_name="dubins3d_velocity",
         domain_cells=[
             int(map_width / MAP_RESOLUTION),
             int(map_height / MAP_RESOLUTION),
-            30,
+            ANGLE_NUM_CELLS,
+            VELOCITY_NUM_CELLS
         ],
-        domain=[[0, 0, 0], [map_width, map_height, 2 * np.pi]],
+        domain=np.array([[0, 0, ANGLE_MIN, VELOCITY_MIN], [map_width, map_height, ANGLE_MAX, VELOCITY_MAX]]),
         mode="brt",
         accuracy="medium",
         converged_values=None,
@@ -745,6 +756,10 @@ def main():
         vehicle_angle = observation[2 * N_SENSORS + 2]
         vehicle_x_velocity = observation[2 * N_SENSORS + 3]
         vehicle_y_velocity = observation[2 * N_SENSORS + 4]
+        # We'll use the current velocity from the observation
+        current_vel = np.linalg.norm(
+            np.array([vehicle_x_velocity, vehicle_y_velocity])
+        )  # Get current velocity magnitude
         # Note: goal distance is now at indices 2*N_SENSORS + 5 and 2*N_SENSORS + 6
         env.render()
 
@@ -809,7 +824,7 @@ def main():
         if values is not None:
             # Compute safe action
             safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
-                np.array([vehicle_x, vehicle_y, vehicle_angle]),
+                np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
                 mppi_action,
                 action_bounds=np.array([[0.0, 5.0], [-4.0, 4.0]]),
                 values=values,
@@ -824,7 +839,7 @@ def main():
                 vehicle_x,
                 vehicle_y,
                 vehicle_angle,
-                solver,
+                current_vel,
                 safety_intervening=has_intervened,
             )
         else:
@@ -836,10 +851,6 @@ def main():
         #
         # For dyaw, we can use the angular velocity directly (dt=0.1 is assumed in the environment)
         # For dvel, we need to convert from absolute velocity to change in velocity
-        # We'll use the current velocity from the observation
-        current_vel = np.linalg.norm(
-            np.array([vehicle_x_velocity, vehicle_y_velocity])
-        )  # Get current velocity magnitude
 
         dvel = safe_mppi_action[0] - current_vel
         print(dvel)
@@ -877,7 +888,7 @@ def visualize_hj_level_set(
     vehicle_x,
     vehicle_y,
     vehicle_angle,
-    solver,
+    vehicle_velocity,
     safety_intervening=False,
 ):
     """
@@ -890,6 +901,7 @@ def visualize_hj_level_set(
         vehicle_x (float): Current vehicle x position
         vehicle_y (float): Current vehicle y position
         vehicle_angle (float): Current vehicle orientation
+        vehicle_velocity (float): Current vehicle velocity
         solver (WarmStartSolver): The HJ reachability solver
         safety_intervening (bool): Whether the safety filter is currently intervening
     """
@@ -915,9 +927,8 @@ def visualize_hj_level_set(
         int((vehicle_angle % (2 * np.pi)) / (2 * np.pi) * (values.shape[2] - 1)),
         values.shape[2] - 1,
     )
-    value_slice = np.array(
-        values[:, :, angle_index]
-    )  # Convert to numpy array if it's a JAX array
+    velocity_index = int(round((vehicle_velocity - VELOCITY_MIN) / (VELOCITY_MAX - VELOCITY_MIN) * (VELOCITY_NUM_CELLS - 1)))
+    value_slice = np.array(values[:, :, angle_index, velocity_index])  
 
     # Create coordinate meshgrid for plotting
     x = np.linspace(0, occupancy_map.width, occupancy_map.grid_width)
