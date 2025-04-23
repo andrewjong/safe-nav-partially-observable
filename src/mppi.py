@@ -559,8 +559,8 @@ class Navigator:
         # First element is linear velocity, second is angular velocity
         # Limit linear velocity to a reasonable range (0.5 to 3.0) - enforce minimum positive velocity
         # Limit angular velocity to a reasonable range (-1.5 to 1.5) - reduce max angular velocity
-        mppi_config["u_min"] = torch.tensor([0.5, -1.5], dtype=self.dtype, device=self.device)
-        mppi_config["u_max"] = torch.tensor([3.0, 1.5], dtype=self.dtype, device=self.device)
+        mppi_config["u_min"] = torch.tensor([-0.5, -1.0], dtype=self.dtype, device=self.device)
+        mppi_config["u_max"] = torch.tensor([1.0, 1.5], dtype=self.dtype, device=self.device)
         mppi_config["lambda_"] = 1
         mppi_config["rollout_samples"] = 1
         mppi_config["terminal_state_cost"] = self.mppi_terminal_state_cost_funct

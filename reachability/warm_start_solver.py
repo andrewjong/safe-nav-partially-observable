@@ -31,7 +31,8 @@ class WarmStartSolverConfig:
     print_progress: bool = True
 
 
-speed = 2.0
+# FUCKKKKK. FUCK FUCK FUCK
+speed = 0.0
 class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
     def __init__(self,
                  max_turn_rate=1.,

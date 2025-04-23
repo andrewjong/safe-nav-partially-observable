@@ -26,8 +26,9 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # Create the environment
 env = posggym.make(
     "DrivingContinuous-v0",
-    # world="30x30OneWall",
-    world="14x14Empty",
+    world="30x30OneWall",
+    # world="14x14Empty",
+    # world="30x30Empty",
     # world="30x30ScatteredObstacleField",
     # world="14x14Sparse",
     num_agents=1,
@@ -784,16 +785,14 @@ def main():
         # For dvel, we need to convert from absolute velocity to change in velocity
         # We'll use the current velocity from the observation
         current_vel = np.linalg.norm(
-            observations["0"][3:5]
+            np.array([vehicle_x_velocity, vehicle_y_velocity])
         )  # Get current velocity magnitude
 
-        # Due to how the environment combines velocities, we need to negate the velocity difference
-        # The environment adds a new velocity component in the new heading direction
-        # A negative dvel effectively reduces the overall velocity
-        dvel = current_vel - safe_mppi_action[0]  # Negated change in velocity
+        dvel = safe_mppi_action[0] - current_vel
+        dvel = current_vel - safe_mppi_action[0]
 
         # Convert the action to the environment's format, which is [dyaw, dvel]. Whereas our controller code outputs [linear_vel, angular_vel]
-        posggym_action = np.array([safe_mppi_action[1] * 0.1, dvel])  # dyaw = angular_vel * dt, dvel
+        posggym_action = np.array([safe_mppi_action[1], dvel])  # dyaw = angular_vel * dt, dvel
         # Action conversion complete
         observations, rewards, terminations, truncations, all_done, infos = env.step(
             {"0": posggym_action}
