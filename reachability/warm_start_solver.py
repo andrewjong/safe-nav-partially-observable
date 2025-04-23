@@ -246,6 +246,8 @@ class WarmStartSolver:
         print("Starting BRT computation") if self.config.print_progress else None
         time_start = time_pkg()
         for i in range(1, len(times)):
+            values = initial_values
+            break
             time = times[i - 1]
             target_time = times[i]
             values = self.step(
