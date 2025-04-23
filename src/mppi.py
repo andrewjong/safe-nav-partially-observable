@@ -713,23 +713,24 @@ class Navigator:
         # Collision cost
         collision_cost = self._compute_collision_cost(current_state, action)
         
-        # Penalize large changes in linear velocity to reduce oscillations
-        # Prefer constant positive linear velocity (close to 1.5)
-        # Heavily penalize negative or zero linear velocity to prevent backwards motion
-        linear_vel_cost = torch.where(
-            action[:, 0] < 0.5,
-            10.0 * (0.5 - action[:, 0]),  # Heavy penalty for low/negative velocity
-            torch.abs(action[:, 0] - 1.5)  # Prefer velocity around 1.5
-        )
+        # # Penalize large changes in linear velocity to reduce oscillations
+        # # Prefer constant positive linear velocity (close to 1.5)
+        # # Heavily penalize negative or zero linear velocity to prevent backwards motion
+        # linear_vel_cost = torch.where(
+        #     action[:, 0] < 0.5,
+        #     10.0 * (0.5 - action[:, 0]),  # Heavy penalty for low/negative velocity
+        #     torch.abs(action[:, 0] - 1.5)  # Prefer velocity around 1.5
+        # )
         
         # Penalize large angular velocities to encourage smoother paths
-        angular_vel_cost = torch.abs(action[:, 1])
+        # angular_vel_cost = torch.abs(action[:, 1])
         
         # Combine all costs with their respective weights
-        cost = (weights[0] * dist_goal_cost + 
-                weights[1] * collision_cost + 
-                weights[2] * linear_vel_cost + 
-                weights[3] * angular_vel_cost)
+        cost = (weights[0] * dist_goal_cost 
+                + weights[1] * collision_cost 
+                # + weights[2] * linear_vel_cost 
+                # + weights[3] * angular_vel_cost
+                )
         
         return cost
 

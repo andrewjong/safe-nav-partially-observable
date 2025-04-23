@@ -13,7 +13,7 @@ from src.mppi import Navigator, dubins_dynamics_tensor
 
 MAP_WIDTH = 30
 MAP_HEIGHT = 30
-MAP_RESOLUTION = .5  # units per cell
+MAP_RESOLUTION = 1.0  # units per cell
 
 N_SENSORS = 16
 MAX_SENSOR_DISTANCE = 5.0
@@ -27,7 +27,7 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 env = posggym.make(
     "DrivingContinuous-v0",
     # world="30x30OneWall",
-    world="30x30Empty",
+    world="14x14Empty",
     # world="30x30ScatteredObstacleField",
     # world="14x14Sparse",
     num_agents=1,
@@ -710,7 +710,7 @@ def main():
         )
         # Removed redundant update_plot() call - we'll only use the MPPI visualization
 
-        fail_set = occupancy_map.grid != occupancy_map.FREE
+        initial_safe_set = occupancy_map.grid == occupancy_map.FREE
 
         # compute a nominal action via MPPI
 
@@ -754,7 +754,7 @@ def main():
         )
 
         # # now compute HJ reachability
-        values = solver.solve(fail_set, target_time=-10.0, dt=0.1, epsilon=0.0001)
+        values = solver.solve(initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001)
         
         # Visualize the HJ reachability level set
         if values is not None:
@@ -767,6 +767,7 @@ def main():
             )
             
             # Visualize with safety status
+            fail_set = np.logical_not(initial_safe_set)
             visualize_hj_level_set(
                 values, fail_set, occupancy_map, 
                 vehicle_x, vehicle_y, vehicle_angle, 
@@ -876,7 +877,7 @@ def visualize_hj_level_set(values, fail_set, occupancy_map, vehicle_x, vehicle_y
     min_val, max_val = np.min(value_slice), np.max(value_slice)
     value_range = max_val - min_val
     vmin, vmax = min_val - 0.1 * value_range, max_val + 0.1 * value_range
-    
+    # 
     value_contour = ax.contourf(X, Y, value_slice, levels=20, cmap='viridis', alpha=0.7, vmin=vmin, vmax=vmax)
     cbar = plt.colorbar(value_contour, ax=ax, label='Value Function')
     

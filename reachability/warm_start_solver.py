@@ -8,7 +8,7 @@ from hj_reachability import dynamics, sets
 from matplotlib import pyplot as plt
 from dataclasses import dataclass
 from time import time as time_pkg
-
+from scipy.ndimage import distance_transform_edt
 
 from learning.base_model import BaseModel
 from learning.gaussian_process import GaussianProcess
@@ -131,14 +131,14 @@ class WarmStartSolver:
         )
         return grid
 
-    def compute_warm_start_values(self, grid_map: np.ndarray) -> np.ndarray:
+    def compute_warm_start_values(self, grid_map: np.ndarray, dx) -> np.ndarray:
         """
         combines the previous solution V_last(x) to l(x) of the new map
         :param grid_map: 2D numpy array of occupancy values
         :return: system-dim-D numpy array of warm-started values. e.g. for dubins3d, this is a 3D array
         """
         warm_values = self.last_values
-        l_x = self.compute_initial_values(grid_map)
+        l_x = self.compute_initial_values(grid_map, dx)
         changed = np.where(self.last_grid_map != grid_map)
         # TODO: Implement loading previous values from file
         try:
@@ -161,6 +161,12 @@ class WarmStartSolver:
             initial_values = grid_map - 0.5 # offset to make sure the distance is 0 at the border
             initial_values = skfmm.distance(initial_values, dx=dx)
             initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
+            # distance_transform_free = distance_transform_edt(grid_map == 1)
+            # distance_transform_obs = distance_transform_edt(grid_map != 1)
+            # for free space, take transform_free, otherwise transform_obs
+            # distance_transform = np.where(grid_map == 1, distance_transform_free, -distance_transform_obs)
+            # initial_values = distance_transform
+            # initial_values = np.tile(initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2]))
             return initial_values
         else:
             raise NotImplementedError(f"System {self.config.system_name} not implemented")
@@ -175,7 +181,7 @@ class WarmStartSolver:
         )
         return target_values
 
-    def solve(self, grid_map, time=0.0, target_time=-10.0, dt=0.01, epsilon=0.0001):
+    def solve(self, grid_map, map_resolution, time=0.0, target_time=-10.0, dt=0.01, epsilon=0.0001):
         if grid_map is None:
             print("Cannot solve because grid map was not provided yet")
             return None, None
@@ -184,10 +190,10 @@ class WarmStartSolver:
 
         if self.last_values is None:
             print("Computing value function from scratch") if self.config.print_progress else None
-            initial_values = self.compute_initial_values(grid_map)
+            initial_values = self.compute_initial_values(grid_map, map_resolution)
         else:
             print("Computing warm-started value function") if self.config.print_progress else None
-            initial_values = self.compute_warm_start_values(grid_map)
+            initial_values = self.compute_warm_start_values(grid_map, map_resolution)
 
         self.initial_values = initial_values
 
