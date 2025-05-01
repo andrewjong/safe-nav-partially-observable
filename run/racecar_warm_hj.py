@@ -806,7 +806,7 @@ def main():
             scaled_origin,  # Origin
             MAP_RESOLUTION,  # Resolution
         )
-        nom_controller.set_odom((vehicle_x, vehicle_y), vehicle_angle)
+        nom_controller.set_state((vehicle_x, vehicle_y), vehicle_angle, current_vel)
         
         # Get nominal action from MPPI
         mppi_action = nom_controller.get_command().cpu().numpy()

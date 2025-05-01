@@ -36,89 +36,103 @@ class WarmStartSolverConfig:
     print_progress: bool = True
 
 
-# FUCKKKKK. FUCK FUCK FUCK
-speed = 0.0
+# class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
+#     def __init__(
+#         self,
+#         max_turn_rate=1.0,
+#         control_mode="max",
+#         disturbance_mode="min",
+#         control_space=None,
+#         disturbance_space=None,
+#     ):
+#         self.speed = 2.0
+#         if control_space is None:
+#             control_space = sets.Box(
+#                 jnp.array([-max_turn_rate]), jnp.array([max_turn_rate])
+#             )
+#         if disturbance_space is None:
+#             disturbance_space = sets.Box(jnp.array([0, 0]), jnp.array([0, 0]))
+#         super().__init__(
+#             control_mode, disturbance_mode, control_space, disturbance_space
+#         )
+
+#     def open_loop_dynamics(self, state, time):
+#         _, _, psi = state
+#         v = self.speed
+#         return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.0])
+
+#     def control_jacobian(self, state, time):
+#         x, y, _ = state
+#         return jnp.array(
+#             [
+#                 [0],
+#                 [0],
+#                 [1],
+#             ]
+#         )
+
+#     def disturbance_jacobian(self, state, time):
+#         return jnp.array(
+#             [
+#                 [1.0, 0.0],
+#                 [0.0, 1.0],
+#                 [0.0, 0.0],
+#             ]
+#         )
 
 
-class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
+class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
     def __init__(
         self,
-        max_turn_rate=1.0,
+        min_angular_velocity=-np.pi / 4,
+        max_angular_velocity=np.pi / 4,
+        min_linear_acceleration=-0.25,
+        max_linear_acceleration=0.25,
         control_mode="max",
         disturbance_mode="min",
         control_space=None,
         disturbance_space=None,
     ):
-        self.speed = speed
+        # Note: Removed self.speed as velocity is now part of the state
         if control_space is None:
             control_space = sets.Box(
-                jnp.array([-max_turn_rate]), jnp.array([max_turn_rate])
+                jnp.array([min_angular_velocity, min_linear_acceleration]),
+                jnp.array([max_angular_velocity, max_linear_acceleration]),
             )
         if disturbance_space is None:
-            disturbance_space = sets.Box(jnp.array([0, 0]), jnp.array([0, 0]))
+            disturbance_space = sets.Box(jnp.array([0]), jnp.array([0]))
         super().__init__(
             control_mode, disturbance_mode, control_space, disturbance_space
         )
 
     def open_loop_dynamics(self, state, time):
-        _, _, psi = state
-        v = self.speed
-        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.0])
-
-    def control_jacobian(self, state, time):
-        x, y, _ = state
-        return jnp.array(
-            [
-                [0],
-                [0],
-                [1],
-            ]
-        )
-
-    def disturbance_jacobian(self, state, time):
-        return jnp.array(
-            [
-                [1.0, 0.0],
-                [0.0, 1.0],
-                [0.0, 0.0],
-            ]
-        )
-
-
-class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
-    def __init__(self,
-                 max_turn_rate=1.,
-                 control_mode="max",
-                 disturbance_mode="min",
-                 control_space=None,
-                 disturbance_space=None):
-        # Note: Removed self.speed as velocity is now part of the state
-        if control_space is None:
-            control_space = sets.Box(jnp.array([-max_turn_rate]), jnp.array([max_turn_rate]))
-        if disturbance_space is None:
-            disturbance_space = sets.Box(jnp.array([0, 0, 0]), jnp.array([0, 0, 0]))
-        super().__init__(control_mode, disturbance_mode, control_space, disturbance_space)
-    
-    def open_loop_dynamics(self, state, time):
         x, y, psi, v = state  # State now includes velocity v
-        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0., 0.])
-    
+        return jnp.array([
+            v * jnp.cos(psi), 
+            v * jnp.sin(psi),
+            0.0,
+            0.0])
+
     def control_jacobian(self, state, time):
         x, y, psi, v = state  # Updated to unpack 4 state variables
-        return jnp.array([
-            [0],
-            [0],
-            [1],
-            [0],  # No direct control on velocity
-        ])
-    
+        return jnp.array(
+            [
+                [0, 0],
+                [0, 0],
+                [1, 0],
+                [0, 1],  
+            ]
+        )
+
     def disturbance_jacobian(self, state, time):
-        return jnp.array([
-            [1., 0., 0.],
-            [0., 1., 0.],
-            [0., 0., 0.],
-            [0., 0., 1.],  # Added disturbance channel for velocity
-        ])
+        return jnp.array(
+            [
+                [0.0],
+                [0.0],
+                [0.0],
+                [0.0],  # no disturbance
+            ]
+        )
 
 
 class WarmStartSolver:
@@ -439,9 +453,6 @@ class WarmStartSolver:
             #     state,
             #     nominal_action,
             # )
-
-
-
 
             grad_x = values_grad[0][*state_ind]
             grad_y = values_grad[1][*state_ind]

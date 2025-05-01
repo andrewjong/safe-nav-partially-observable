@@ -17,25 +17,29 @@ def dubins_dynamics_tensor(
     current_state: shape(num_samples, dim_x)
     action: shape(num_samples, dim_u)
     
-    action[:, 0] is linear velocity
-    action[:, 1] is angular velocity
-
+    action[:, 0] is angular velocity
+    action[:, 1] is linear acceleration
     Implemented discrete time dynamics with RK-4.
-
     return:
     next_state: shape(num_samples, dim_x)
     """
-
     def one_step_dynamics(state, action):
-        """Compute the derivatives [dx/dt, dy/dt, dtheta/dt]."""
-        # Use the first element of action as linear velocity
-        linear_vel = action[:, 0]
-        x_dot = linear_vel * torch.cos(state[:, 2])
-        y_dot = linear_vel * torch.sin(state[:, 2])
-        # Use the second element of action as angular velocity
-        theta_dot = action[:, 1]
-        return torch.stack([x_dot, y_dot, theta_dot], dim=1)
-
+        """Compute the derivatives [dx/dt, dy/dt, dtheta/dt, dv/dt]."""
+        # Extract state variables
+        x, y, theta, v = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+        angular_vel = action[:, 0]
+        linear_acc = action[:, 1]
+        
+        # Compute derivatives
+        dx_dt = v * torch.cos(theta)
+        dy_dt = v * torch.sin(theta)
+        dtheta_dt = angular_vel
+        dv_dt = linear_acc
+        
+        # Stack derivatives into a tensor with the same shape as state
+        derivatives = torch.stack([dx_dt, dy_dt, dtheta_dt, dv_dt], dim=1)
+        return derivatives
+    
     # k1
     k1 = one_step_dynamics(current_state, action)
     # k2
@@ -49,9 +53,10 @@ def dubins_dynamics_tensor(
     k4 = one_step_dynamics(end_state_k4, action)
     # Combine k1, k2, k3, k4 to compute the next state
     next_state = current_state + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
-    next_state[..., -1] = next_state[..., -1] % (2 * np.pi)
+    
+    # Normalize theta to [0, 2π]
+    next_state[..., 2] = next_state[..., 2] % (2 * torch.pi)
     return next_state
-
 
 def _ensure_non_zero(cost, beta, factor):
     return torch.exp(-factor * (cost - beta))
@@ -460,7 +465,7 @@ class Navigator:
         self.planner_type = planner_type
         self.robot_radius = robot_radius  # Add robot radius parameter
 
-        self._odom_torch = None
+        self._state_torch = None
         self.planner = self._start_planner()
         self._map_torch = None  # Initialize later with the map data
         self._cell_size = None  # Initialize later with the map resolution
@@ -469,8 +474,8 @@ class Navigator:
         self._goal_thresh = 0.1
 
     def get_command(self):
-        x = self._odom_torch[0]
-        y = self._odom_torch[1]
+        x = self._state_torch[0]
+        y = self._state_torch[1]
         dist_goal = torch.sqrt(
             (x - self._goal_torch[0]) ** 2 + (y - self._goal_torch[1]) ** 2
         )
@@ -478,16 +483,16 @@ class Navigator:
             return torch.tensor([0.0, 0.0])
         command = None
         if self.planner_type == "mppi":
-            command = self.planner.command(self._odom_torch)
+            command = self.planner.command(self._state_torch)
         return command
 
-    def set_odom(self, position, orientation):
+    def set_state(self, position, orientation, velocity):
         """
         :param position: (array-like): [x, y, z]
         :param orientation: (array-like): theta
         """
-        self._odom_torch = torch.tensor(
-            [position[0], position[1], orientation],
+        self._state_torch = torch.tensor(
+            [position[0], position[1], orientation, velocity],
             dtype=self.dtype,
             device=self.device,
         )
@@ -532,7 +537,7 @@ class Navigator:
         """
         if self.planner_type == "mppi":
             # Start with current state
-            state = self._odom_torch.clone().unsqueeze(0)  # Shape: (1, nx)
+            state = self._state_torch.clone().unsqueeze(0)  # Shape: (1, nx)
             trajectory = [state.squeeze(0)]
             
             # Roll out the trajectory using the current control sequence
@@ -550,25 +555,23 @@ class Navigator:
         mppi_config["running_cost"] = self.mppi_cost_func
         mppi_config["nx"] = 3  # [x, y, theta]
         mppi_config["dt"] = self.dt
-        # Adjust noise sigma to have different values for linear and angular velocity
-        # Reduce noise for linear velocity to make it more stable
-        mppi_config["noise_sigma"] = torch.diag(torch.tensor([0.3, 0.8], dtype=self.dtype, device=self.device))
+        # Adjust noise sigma to have different values for angular velocity and linear acceleration
+        mppi_config["noise_sigma"] = torch.diag(torch.tensor([np.pi / 4 / 3, 0.25 / 3], dtype=self.dtype, device=self.device))
         mppi_config["num_samples"] = 300  # Increase samples for better exploration
         mppi_config["horizon"] = 75  # Increase horizon for better planning
         mppi_config["device"] = self.device
         # First element is linear velocity, second is angular velocity
-        # Limit linear velocity to a reasonable range (0.5 to 3.0) - enforce minimum positive velocity
-        # Limit angular velocity to a reasonable range (-1.5 to 1.5) - reduce max angular velocity
-        mppi_config["u_min"] = torch.tensor([0, -0.5], dtype=self.dtype, device=self.device)
-        mppi_config["u_max"] = torch.tensor([1.0, 0.5], dtype=self.dtype, device=self.device)
+        # u is angular velocity, linear acceleration
+        # matching this action space: https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#action-space
+        mppi_config["u_min"] = torch.tensor([-np.pi/4, -0.25], dtype=self.dtype, device=self.device)
+        mppi_config["u_max"] = torch.tensor([np.pi/4, 0.25], dtype=self.dtype, device=self.device)
         mppi_config["lambda_"] = 1
         mppi_config["rollout_samples"] = 1
         mppi_config["terminal_state_cost"] = self.mppi_terminal_state_cost_funct
         mppi_config["rollout_var_cost"] = 0.1
         mppi_config["rollout_var_discount"] = 0.9
-        # Initialize with a moderate positive linear velocity and zero angular velocity
         mppi_config["u_init"] = torch.tensor(
-            [1.5, 0.0], dtype=self.dtype, device=self.device
+            [0.0, 0.0], dtype=self.dtype, device=self.device
         )
         mppi_config["u_per_command"] = 1
 
@@ -768,7 +771,7 @@ class Navigator:
 if __name__ == "__main__":
     state = torch.tensor([0, 0, np.pi])
     navigator = Navigator()
-    navigator.set_odom(state[:2], state[-1])
+    navigator.set_state(state[:2], state[-1])
     navigator.set_map(np.ones((100, 100)), [100, 100], [0, 0], 0.5)
     navigator.set_goal([50, 50])
 
@@ -797,7 +800,7 @@ if __name__ == "__main__":
         # Simulate dynamics with the command
         state = dubins_dynamics_tensor(state.unsqueeze(0), u.unsqueeze(0), 0.1)
         state = state.squeeze()
-        navigator.set_odom(state[:2], state[-1])
+        navigator.set_state(state[:2], state[-1])
         
         # Track position
         positions_x.append(state[0].item())

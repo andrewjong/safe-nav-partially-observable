@@ -54,7 +54,7 @@ def main():
     )
 
     nom_controller = Navigator()
-    nom_controller.set_odom(state[:2],state[2])
+    nom_controller.set_state(state[:2],state[2])
     nom_controller.set_map(builder.failure_map, [30, 40], [0, 0], 1.0)
     nom_controller.set_goal(list(env_params.goal_location))
 
@@ -132,7 +132,7 @@ def main():
         if terminated:
             break
 
-        nom_controller.set_odom(state[:2], state[2])
+        nom_controller.set_state(state[:2], state[2])
         # nom_controller.set_map(builder.failure_map, [30, 40], [0, 0], 1.0)
 
         # Real time plotting
