@@ -33,9 +33,10 @@ ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 
 # BRT (Backward Reachable Tube) parameters
-ANGLE_MIN = 0
-ANGLE_MAX = 2 * np.pi
-ANGLE_NUM_CELLS = 20
+# https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
+THETA_MIN = 0
+THETA_MAX = 2 * np.pi
+THETA_NUM_CELLS = 20
 VELOCITY_MIN = -1.0
 VELOCITY_MAX = 1.0
 VELOCITY_NUM_CELLS = 5
@@ -737,12 +738,12 @@ def main():
         domain_cells=[
             int(map_width / MAP_RESOLUTION),
             int(map_height / MAP_RESOLUTION),
-            ANGLE_NUM_CELLS,
+            THETA_NUM_CELLS,
             VELOCITY_NUM_CELLS
         ],
         domain=np.array([
-            [0, 0, ANGLE_MIN, VELOCITY_MIN], 
-            [map_width, map_height, ANGLE_MAX, VELOCITY_MAX]
+            [0, 0, THETA_MIN, VELOCITY_MIN], 
+            [map_width, map_height, THETA_MAX, VELOCITY_MAX]
         ]),
         mode="brt",
         accuracy="medium",
@@ -848,15 +849,9 @@ def main():
             safe_mppi_action = mppi_action
             has_intervened = False
 
-        # Convert MPPI action to environment action format
-        # MPPI: [linear_vel, angular_vel]
-        # Env: [dyaw, dvel]
-        dvel = safe_mppi_action[0] - current_vel
-        posggym_action = np.array([safe_mppi_action[1], dvel])
-        
         # Take a step in the environment
         observations, rewards, terminations, truncations, all_done, infos = env.step(
-            {"0": posggym_action}
+            {"0": safe_mppi_action}
         )
         
         # Check for collision
