@@ -443,58 +443,7 @@ class WarmStartSolver:
 
         has_intervened = not is_safe
 
-        has_intervened = False
-        # if not is_safe:
-        #     print(f"\033[31mSafe controller intervening. Value is {value}\033[0m")
-        #     state_ind = self._state_to_grid(state)
-
-        #     # safe_action = self.filter_control_qp(
-        #     #     value,
-        #     #     np.array(values_grad)[:, *state_ind],
-        #     #     state,
-        #     #     nominal_action,
-        #     # )
-
-        #     grad_x = values_grad[0][*state_ind]
-        #     grad_y = values_grad[1][*state_ind]
-        #     grad_theta = values_grad[2][*state_ind]
-        #     grad_velocity = values_grad[3][*state_ind] if len(values_grad) > 3 else 0
-
-        #     # TODO: Replace temporal straight forward solution
-        #     N_samples = 100
-        #     w_samples = np.linspace(action_bounds[1][0], action_bounds[1][1], N_samples)
-        #     v_samples = np.linspace(action_bounds[0][0], action_bounds[0][1], N_samples)
-
-        #     # Create meshgrid for joint optimization
-        #     W, V = np.meshgrid(w_samples, v_samples)
-
-        #     # Define the optimization objective for both controls
-        #     # v affects x and y dynamics, w affects theta
-        #     def opt_problem(v, w):
-        #         return (
-        #             v * np.cos(state[2]) * grad_x
-        #             + v * np.sin(state[2]) * grad_y
-        #             + grad_theta * w
-        #             + grad_velocity * 0
-        #         )  # Assuming velocity doesn't directly affect its own derivative
-
-        #     # Evaluate objective across the grid
-        #     objective_values = opt_problem(V, W)
-
-        #     # Find the indices of the maximum value
-        #     optimal_indices = np.unravel_index(
-        #         np.argmax(objective_values), objective_values.shape
-        #     )
-        #     v_opt_ind, w_opt_ind = optimal_indices
-
-        #     # Get the optimal controls
-        #     v_opt = v_samples[v_opt_ind]
-        #     w_opt = w_samples[w_opt_ind]
-
-        #     action = np.array([v_opt, w_opt])
-        #     print("Safe action: linear_vel={v_opt}, angular_vel={w_opt}")
-        # else:
-        #     print("\033[32m{}\033[0m".format("Safe controller not intervening"))
+        # TODO
 
         return action, value, initial_value, has_intervened
 

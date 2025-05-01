@@ -553,7 +553,7 @@ class Navigator:
 
         mppi_config["dynamics"] = dubins_dynamics_tensor
         mppi_config["running_cost"] = self.mppi_cost_func
-        mppi_config["nx"] = 3  # [x, y, theta]
+        mppi_config["nx"] = 4  # [x, y, theta, v]
         mppi_config["dt"] = self.dt
         # Adjust noise sigma to have different values for angular velocity and linear acceleration
         mppi_config["noise_sigma"] = torch.diag(torch.tensor([np.pi / 4 / 10, 0.25 / 4], dtype=self.dtype, device=self.device))
