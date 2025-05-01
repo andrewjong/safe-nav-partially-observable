@@ -107,11 +107,7 @@ class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
 
     def open_loop_dynamics(self, state, time):
         x, y, psi, v = state  # State now includes velocity v
-        return jnp.array([
-            v * jnp.cos(psi), 
-            v * jnp.sin(psi),
-            0.0,
-            0.0])
+        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.0, 0.0])
 
     def control_jacobian(self, state, time):
         x, y, psi, v = state  # Updated to unpack 4 state variables
@@ -120,7 +116,7 @@ class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
                 [0, 0],
                 [0, 0],
                 [1, 0],
-                [0, 1],  
+                [0, 1],
             ]
         )
 
