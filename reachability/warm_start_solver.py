@@ -348,66 +348,21 @@ class WarmStartSolver:
 
         return value > self.config.superlevel_set_epsilon, value, initial_value
 
-    def filter_control_qp(self, current_value, gradient, state, nominal_control):
-        """
-        Filter the nominal control to ensure safety using quadratic programming.
-
-        Args:
-            state: Current state [x, y, theta, v]
-            nominal_control: Nominal control [v, omega]
-
-        Returns:
-            safe_control: Safe control [v, omega] that is closest to nominal_control
-        """
-        # Get the current value and gradient
-
-        # Get the dynamics
-        # A, b = self.get_dynamics(state)
-        A = self.get_dynamics("dubins3d_velocity").control_jacobian(state, 0)
-        b = self.get_dynamics("dubins3d_velocity").open_loop_dynamics(state, 0)
-
-        # Set up the QP problem
-        u = cp.Variable(2)  # Control variables [v, omega]
-
-        # Objective: minimize ||u - u_nominal||^2
-        objective = cp.Minimize(cp.sum_squares(u - nominal_control))
-
-        # Safety constraint: gradient^T * (Ax + Bu) >= -alpha * value
-        # This ensures the system stays within the safe set
-        alpha = 1.0  # Barrier parameter
-        safety_constraint = gradient.T @ (A @ u + b) >= -alpha * current_value
-
-        # Control bounds constraints
-        bound_constraints = [
-            u[0] >= -1.0,
-            u[0] <= 1.0,
-            u[1] >= -4.0,
-            u[1] <= 4.0,
-        ]
-
-        # If already deep in unsafe region, focus on returning to safety
-        if current_value < -0.1:
-            # Maximize the value function growth
-            objective = cp.Maximize(gradient.T @ (A @ u + b))
-
-        # Solve the QP problem
-        constraints = [safety_constraint] + bound_constraints
-        prob = cp.Problem(objective, constraints)
-
-        try:
-            prob.solve()
-
-            if prob.status == "optimal" or prob.status == "optimal_inaccurate":
-                return u.value
-            else:
-                print(f"QP solver status: {prob.status}. Using fallback solution.")
-                return self._fallback_safe_control(state, gradient, A)
-        except Exception as e:
-            print(f"QP solver failed: {e}. Using fallback solution.")
-
     def compute_safe_control(
         self, state, nominal_action, action_bounds, values=None, values_grad=None
     ):
+        """Given a state and nominal action, computes the safe control action
+
+        Args:
+            state (np.ndarray): [x, y, theta, v] state of the system
+            nominal_action (np.ndarray): [angular_velocity, linear_acceleration] action
+            action_bounds (np.ndarray): [[min_angular_velocity, max_angular_velocity], [min_linear_acceleration, max_linear_acceleration]]
+            values (np.ndarray, optional): values from the level set, where > 0 is safe and < 0 is unsafe. Defaults to None.
+            values_grad (np.ndarray, optional): gradient of the values. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         if values is None:
             values = self.last_values
 
@@ -430,7 +385,7 @@ class WarmStartSolver:
 
         has_intervened = not is_safe
 
-        # TODO
+        # OPENHANDS TODO
 
         return action, value, initial_value, has_intervened
 
