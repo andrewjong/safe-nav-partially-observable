@@ -150,7 +150,7 @@ class WarmStartSolver:
         self.last_grid_map = None
 
     def get_problem_definition(self, system, domain, dims, mode, accuracy):
-        dynamics = self.get_dynamics(system)
+        dynamics = Dubins3DVelocity()
         solver_settings = self.get_solver_settings(accuracy=accuracy, mode=mode)
         grid = self.get_domain_grid(domain, dims)
         problem_definition = {
@@ -176,18 +176,6 @@ class WarmStartSolver:
             return hj.SolverSettings.with_accuracy(
                 accuracy, hamiltonian_postprocessor=hj.solver.backwards_reachable_tube
             )
-
-    def get_dynamics(self, system_name: str, **kwargs):
-        systems = ["dubins3d", "dubins3d_velocity"]
-        if system_name not in systems:
-            print(f"'system' has to be one of {systems}")
-
-        # TODO: we implemented this ourselves in the hj_reachability toolbox. we are still working out a nice way to realease this.
-        # unfortunately, meanwhile you will have to implement this yourself in the toolbox too.
-        if system_name == "dubins3d":
-            return Dubins3D()
-        elif system_name == "dubins3d_velocity":
-            return Dubins3DVelocity()
 
     def get_domain_grid(self, domain, domain_cells):
         """
@@ -420,7 +408,6 @@ class WarmStartSolver:
     def compute_safe_control(
         self, state, nominal_action, action_bounds, values=None, values_grad=None
     ):
-        # TODO: modify for other systems
         if values is None:
             values = self.last_values
 
