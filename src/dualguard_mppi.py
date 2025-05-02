@@ -273,6 +273,36 @@ class DualGuardNavigator(Navigator):
             return command
         
         return None
+        
+    def get_sampled_trajectories(self):
+        """Override to handle dualguard_mppi planner type."""
+        if self.planner_type in ["mppi", "dualguard_mppi"]:
+            # states: torch.tensor, shape(M, K, T, nx)
+            trajectories = self.planner.states
+            M, K, T, nx = trajectories.shape
+            return trajectories.view(M * K, T, nx)
+        return None
+            
+    def get_chosen_trajectory(self):
+        """
+        Override to handle dualguard_mppi planner type.
+        
+        Returns:
+            torch.Tensor: Tensor of shape (T+1, nx) containing the chosen trajectory
+        """
+        if self.planner_type in ["mppi", "dualguard_mppi"]:
+            # Start with current state
+            state = self._state_torch.clone().unsqueeze(0)  # Shape: (1, nx)
+            trajectory = [state.squeeze(0)]
+            
+            # Roll out the trajectory using the current control sequence
+            for t in range(self.planner.T):
+                action = self.planner.U[t].unsqueeze(0)  # Shape: (1, nu)
+                state = dubins_dynamics_tensor(state, action, self.dt)
+                trajectory.append(state.squeeze(0))
+                
+            return torch.stack(trajectory)
+        return None
             
     def _start_planner(self):
         """Override to create a DualGuardMPPI planner if planner_type is 'dualguard_mppi'."""
