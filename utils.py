@@ -1,38 +1,50 @@
 import torch
-import numpy as np
 
-def dubins_dynamics_tensor(state, action, dt):
+def dubins_dynamics_tensor(
+    current_state: torch.Tensor, action: torch.Tensor, dt: float
+) -> torch.Tensor:
     """
-    Dubins car dynamics with velocity as a state variable.
+    current_state: shape(num_samples, dim_x)
+    action: shape(num_samples, dim_u)
     
-    Args:
-        state: torch.Tensor of shape (batch_size, 4) containing [x, y, theta, v]
-        action: torch.Tensor of shape (batch_size, 2) containing [angular_velocity, linear_acceleration]
-        dt: float, time step
+    action[:, 0] is angular velocity
+    action[:, 1] is linear acceleration
+    Implemented discrete time dynamics with RK-4.
+    return:
+    next_state: shape(num_samples, dim_x)
+    """
+    def one_step_dynamics(state, action):
+        """Compute the derivatives [dx/dt, dy/dt, dtheta/dt, dv/dt]."""
+        # Extract state variables
+        x, y, theta, v = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
+        angular_vel = action[:, 0]
+        linear_acc = action[:, 1]
         
-    Returns:
-        next_state: torch.Tensor of shape (batch_size, 4) containing the next state
-    """
-    # Extract state components
-    x = state[..., 0]
-    y = state[..., 1]
-    theta = state[..., 2]
-    v = state[..., 3]
+        # Compute derivatives
+        dx_dt = v * torch.cos(theta)
+        dy_dt = v * torch.sin(theta)
+        dtheta_dt = angular_vel
+        dv_dt = linear_acc
+        
+        # Stack derivatives into a tensor with the same shape as state
+        derivatives = torch.stack([dx_dt, dy_dt, dtheta_dt, dv_dt], dim=1)
+        return derivatives
     
-    # Extract action components
-    angular_velocity = action[..., 0]
-    linear_acceleration = action[..., 1]
+    # k1
+    k1 = one_step_dynamics(current_state, action)
+    # k2
+    mid_state_k2 = current_state + 0.5 * dt * k1
+    k2 = one_step_dynamics(mid_state_k2, action)
+    # k3
+    mid_state_k3 = current_state + 0.5 * dt * k2
+    k3 = one_step_dynamics(mid_state_k3, action)
+    # k4
+    end_state_k4 = current_state + dt * k3
+    k4 = one_step_dynamics(end_state_k4, action)
+    # Combine k1, k2, k3, k4 to compute the next state
+    next_state = current_state + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
     
-    # Compute next state
-    next_x = x + v * torch.sin(theta) * dt
-    next_y = y + v * torch.cos(theta) * dt
-    next_theta = theta + angular_velocity * dt
-    next_v = v + linear_acceleration * dt
-    
-    # Normalize theta to [0, 2*pi)
-    next_theta = next_theta % (2 * np.pi)
-    
-    # Combine into next state
-    next_state = torch.stack([next_x, next_y, next_theta, next_v], dim=-1)
-    
+    # Normalize theta to [-pi, pi]
+    # normalize theta to [0, 2*pi]
+    next_state[..., 2] = next_state[..., 2] % (2 * torch.pi)
     return next_state
