@@ -26,20 +26,22 @@ from src.mppi import Navigator
 # -----------------------------------------------------------------------------
 
 # Environment setup
-MAP_RESOLUTION = 1.0  # units per cell
-N_SENSORS = 16
-MAX_SENSOR_DISTANCE = 5.0
+MAP_RESOLUTION = 0.25  # units per cell
+N_SENSORS = 32
+MAX_SENSOR_DISTANCE = 10.0
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
+FOV = np.pi / 3  # 45-degree view centered at the front of the agent
+FOV = np.pi
 
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
 THETA_MIN = -np.pi
 THETA_MAX = np.pi
-THETA_NUM_CELLS = 10
+THETA_NUM_CELLS = 3
 VELOCITY_MIN = -1.0
 VELOCITY_MAX = 1.0
-VELOCITY_NUM_CELLS = 10
+VELOCITY_NUM_CELLS = 20
 
 # Cell state constants
 UNSEEN = 0
@@ -717,8 +719,8 @@ def main():
     env = posggym.make(
         "DrivingContinuous-v0",
         # world="30x30OneWallDiagonal",
-        world="30x30EmptyStraight",
-        # world="14x14Empty",
+        # world="30x30EmptyStraight",
+        world="14x14Empty",
         # world="30x30Empty",
         # world="30x30ScatteredObstacleField",
         # world="14x14Sparse",
@@ -768,7 +770,7 @@ def main():
     )
     
     # Mark initial free space around the robot
-    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 4.0)
+    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 1.0)
 
     # Initialize Navigator with the agent radius from the environment
     nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
@@ -875,7 +877,7 @@ def main():
             )
             
             # Mark initial free space
-            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 4.0)
+            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 2.0)
             
             # Reinitialize solver
             solver = WarmStartSolver(config=config)

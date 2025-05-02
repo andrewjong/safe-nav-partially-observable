@@ -556,7 +556,7 @@ class Navigator:
         mppi_config["nx"] = 4  # [x, y, theta, v]
         mppi_config["dt"] = self.dt
         # Adjust noise sigma to have different values for angular velocity and linear acceleration
-        mppi_config["noise_sigma"] = torch.diag(torch.tensor([np.pi / 4 / 10000, 0.25 / 4], dtype=self.dtype, device=self.device))
+        mppi_config["noise_sigma"] = torch.diag(torch.tensor([np.pi / 4 / 100000, 0.25 / 4 / 10000000], dtype=self.dtype, device=self.device))
         mppi_config["num_samples"] = 300  # Increase samples for better exploration
         mppi_config["horizon"] = 75  # Increase horizon for better planning
         mppi_config["device"] = self.device
