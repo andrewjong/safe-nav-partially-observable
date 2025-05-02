@@ -11,6 +11,10 @@ and HJ reachability for safety guarantees.
 import math
 import time
 import argparse
+import os
+import csv
+import yaml
+from datetime import datetime
 
 # Third-party imports
 import numpy as np
@@ -18,6 +22,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import posggym
 from utils import calculate_linear_velocity
+from matplotlib.animation import FFMpegWriter
 
 from skimage.morphology import dilation, disk
 # Local imports
@@ -28,7 +33,8 @@ from src.dualguard_mppi import DualGuardNavigator
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
-NUM_STEPS = 100
+MAX_STEPS_PER_TRIAL = 100
+NUM_TRIALS = 5
 
 # Environment setup
 MAP_RESOLUTION = 0.5  # units per cell
@@ -42,6 +48,9 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # FOV = np.pi * 2
 
 MARK_FREE_RADIUS = 3.0
+
+# Experiment recording
+RECORD_DIR = "experiments"
 
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
@@ -335,12 +344,14 @@ class MapVisualizer:
     A class to handle visualization of the occupancy map, MPPI trajectories, and HJ level sets.
     """
 
-    def __init__(self, occupancy_map):
+    def __init__(self, occupancy_map, record_video=False, video_path=None):
         """
         Initialize the visualizer.
 
         Args:
             occupancy_map (OccupancyMap): The occupancy map to visualize
+            record_video (bool): Whether to record video
+            video_path (str): Path to save the video file
         """
         self.occupancy_map = occupancy_map
         
@@ -357,7 +368,39 @@ class MapVisualizer:
         
         # HJ visualization variables
         self.hj_fig = None
+        
+        # Video recording variables
+        self.record_video = record_video
+        self.video_path = video_path
+        self.video_writer = None
+        
+        if self.record_video and self.video_path:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(self.video_path), exist_ok=True)
 
+    def start_video_recording(self):
+        """Start recording video if enabled."""
+        if self.record_video and self.video_path:
+            # Initialize video writer
+            self.video_writer = FFMpegWriter(fps=10)
+            
+            # Start recording from HJ figure if it exists, otherwise from MPPI figure
+            if self.hj_fig is not None:
+                self.video_writer.setup(self.hj_fig, self.video_path)
+            elif self.mppi_fig is not None:
+                self.video_writer.setup(self.mppi_fig, self.video_path)
+    
+    def stop_video_recording(self):
+        """Stop recording video if enabled."""
+        if self.record_video and self.video_writer is not None:
+            self.video_writer.finish()
+            self.video_writer = None
+    
+    def capture_frame(self):
+        """Capture a frame for the video if recording is enabled."""
+        if self.record_video and self.video_writer is not None:
+            self.video_writer.grab_frame()
+    
     def reset(self):
         """Reset the visualization to its initial state."""
         # Reset MPPI figure elements without closing the window
@@ -926,12 +969,82 @@ def parse_args():
         default=0.5,
         help="Weight for information gain in the cost function (only used if --use_info_gain is set)"
     )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="Record experiment data and video"
+    )
+    parser.add_argument(
+        "--experiment_number",
+        type=int,
+        default=None,
+        help="Experiment number for recording (auto-generated if not provided)"
+    )
+    parser.add_argument(
+        "--num_trials",
+        type=int,
+        default=NUM_TRIALS,
+        help=f"Number of trials to run (default: {NUM_TRIALS})"
+    )
+    parser.add_argument(
+        "--max_steps_per_trial",
+        type=int,
+        default=MAX_STEPS_PER_TRIAL,
+        help=f"Maximum number of steps per trial (default: {MAX_STEPS_PER_TRIAL})"
+    )
     return parser.parse_args()
 
 def main():
     """Main function to run the simulation."""
     # Parse command-line arguments
     args = parse_args()
+    
+    # Set up experiment recording
+    if args.record:
+        # Create experiments directory if it doesn't exist
+        os.makedirs(RECORD_DIR, exist_ok=True)
+        
+        # Generate experiment number if not provided
+        experiment_number = args.experiment_number
+        if experiment_number is None:
+            # Find the highest experiment number and increment by 1
+            existing_experiments = [int(d.split('_')[1]) for d in os.listdir(RECORD_DIR) 
+                                   if d.startswith('experiment_') and d.split('_')[1].isdigit()]
+            experiment_number = max(existing_experiments, default=0) + 1
+        
+        # Create experiment directory
+        experiment_dir = os.path.join(RECORD_DIR, f"experiment_{experiment_number}")
+        os.makedirs(experiment_dir, exist_ok=True)
+        
+        # Set up file paths
+        video_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_video.mp4")
+        data_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_data.csv")
+        params_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_params.yaml")
+        
+        # Save experiment parameters
+        experiment_params = {
+            'planner_type': args.planner,
+            'world_name': args.world,
+            'use_info_gain': args.use_info_gain,
+            'info_gain_weight': args.info_gain_weight if args.use_info_gain else 0.0,
+            'gradient_scale': args.gradient_scale,
+            'safety_threshold': args.safety_threshold,
+            'num_trials': args.num_trials,
+            'max_steps_per_trial': args.max_steps_per_trial,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        
+        with open(params_path, 'w') as f:
+            yaml.dump(experiment_params, f)
+        
+        # Initialize CSV file for data recording
+        with open(data_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['trial', 'steps', 'collision', 'reached_goal'])
+    else:
+        video_path = None
+        data_path = None
+        experiment_number = None
     
     # Create the environment
     global env, robot_goal
@@ -946,7 +1059,6 @@ def main():
         fov=FOV,
         render_mode="human",
     )
-
 
     # Get map dimensions from environment
     map_width = env.model.state_space[0][0].high[0]
@@ -976,173 +1088,193 @@ def main():
 
     # Initialize occupancy map and visualizer
     occupancy_map = OccupancyMap(map_width, map_height, MAP_RESOLUTION)
-    visualizer = MapVisualizer(occupancy_map)
+    visualizer = MapVisualizer(occupancy_map, record_video=args.record, video_path=video_path)
 
-    # Reset environment and get initial observations
-    observations, infos = env.reset()
-    lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
-        observations["0"][0:N_SENSORS],
-        observations["0"][2 * N_SENSORS],
-        observations["0"][2 * N_SENSORS + 1],
-        observations["0"][2 * N_SENSORS + 2],
-    )
-    
-    # Mark initial free space around the robot
-    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, MARK_FREE_RADIUS)
-
-    # Initialize the appropriate controller based on the planner type
-    if args.planner == "mppi":
-        print("Using vanilla MPPI planner")
-        nom_controller = Navigator(
-            robot_radius=env.model.world.agent_radius,
-            use_info_gain=args.use_info_gain,
-            info_gain_weight=args.info_gain_weight
-        )
-        # Set FOV and sensor range to match environment settings
-        nom_controller.fov_angle = FOV
-        nom_controller.sensor_range = MAX_SENSOR_DISTANCE
-        if args.use_info_gain:
-            print(f"Information gain enabled with weight {args.info_gain_weight}")
-    else:  # dualguard_mppi
-        print("Using DualGuard MPPI planner")
-        nom_controller = DualGuardNavigator(
-            hj_solver=solver,
-            safety_threshold=args.safety_threshold,
-            gradient_scale=args.gradient_scale,
-            robot_radius=env.model.world.agent_radius,
-            use_info_gain=args.use_info_gain,
-            info_gain_weight=args.info_gain_weight
-        )
-        # Set FOV and sensor range to match environment settings
-        nom_controller.fov_angle = FOV
-        nom_controller.sensor_range = MAX_SENSOR_DISTANCE
-        if args.use_info_gain:
-            print(f"Information gain enabled with weight {args.info_gain_weight}")
-    
-    # Main simulation loop
-    for _ in range(NUM_STEPS):
-        # Get current observation
-        observation = observations["0"]
-        lidar_distances = observation[0:N_SENSORS]
-        vehicle_x = observation[2 * N_SENSORS]
-        vehicle_y = observation[2 * N_SENSORS + 1]
-        vehicle_angle = observation[2 * N_SENSORS + 2]
-        vehicle_x_velocity = observation[2 * N_SENSORS + 3]
-        vehicle_y_velocity = observation[2 * N_SENSORS + 4]
+    # Run for the specified number of trials
+    for trial in range(args.num_trials):
+        print(f"Starting trial {trial+1}/{args.num_trials}")
         
-        current_vel = calculate_linear_velocity(vehicle_x_velocity, vehicle_y_velocity, vehicle_angle)
-
-        
-        # Render environment
-        env.render()
-
-        # Update occupancy map from lidar observations
-        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle, fov=FOV)
-
-        # Get initial safe set (free cells)
-        initial_safe_set = occupancy_map.grid == FREE
-
-        # Set up MPPI controller
-        scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
-        robot_goal = env.state[0].dest_coord
-        
-        # Configure MPPI controller
-        nom_controller.set_goal(robot_goal)
-        nom_controller.set_map(
-            occupancy_map.grid != FREE,  # Obstacle map (not free = obstacle)
-            [occupancy_map.grid_width, occupancy_map.grid_height],  # Grid dimensions (width, height) - matches warm start solver convention
-            scaled_origin,  # Origin
-            MAP_RESOLUTION,  # Resolution
-        )
-        nom_controller.set_state((vehicle_x, vehicle_y), vehicle_angle, current_vel)
-
-        # Compute HJ reachability
-        values = solver.solve(
-            initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
+        # Reset environment and get initial observations
+        observations, infos = env.reset()
+        lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
+            observations["0"][0:N_SENSORS],
+            observations["0"][2 * N_SENSORS],
+            observations["0"][2 * N_SENSORS + 1],
+            observations["0"][2 * N_SENSORS + 2],
         )
         
-        # Get nominal action from MPPI
-        mppi_action = nom_controller.get_command().cpu().numpy()
+        # Mark initial free space around the robot
+        occupancy_map.mark_free_radius(vehicle_x, vehicle_y, MARK_FREE_RADIUS)
 
-        # Get and visualize MPPI trajectories
-        sampled_trajectories = nom_controller.get_sampled_trajectories()
-        chosen_trajectory = nom_controller.get_chosen_trajectory()
-
-        # Visualize MPPI trajectories
-        visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal)
-
-        # If using DualGuard MPPI, set the HJ values
-        if args.planner == "dualguard_mppi" and values is not None:
-            # Compute gradients for DualGuard MPPI
-            values_grad = np.gradient(values)
-            # Set the HJ values and gradients in the DualGuard MPPI planner
-            nom_controller.set_hj_values(values, values_grad)
-            # Get the action from DualGuard MPPI (which already incorporates safety)
-            safe_mppi_action = mppi_action
-            has_intervened = False  # DualGuard handles safety internally
-        # If using vanilla MPPI with HJ safety filter
-        elif args.planner == "mppi" and values is not None:
-            # Compute safe action
-            safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
-                np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
-                mppi_action,
-                action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
-                values=values,
+        # Initialize the appropriate controller based on the planner type
+        if args.planner == "mppi":
+            print("Using vanilla MPPI planner")
+            nom_controller = Navigator(
+                robot_radius=env.model.world.agent_radius,
+                use_info_gain=args.use_info_gain,
+                info_gain_weight=args.info_gain_weight
             )
-        else:
-            safe_mppi_action = mppi_action
-            has_intervened = False
-            
-        # Visualize HJ level set if values are available
-        if values is not None:
-            fail_set = np.logical_not(initial_safe_set)
-            visualizer.visualize_hj_level_set(
-                solver,
-                values,
-                fail_set,
-                vehicle_x,
-                vehicle_y,
-                vehicle_angle,
-                current_vel,
-                safety_intervening=has_intervened,
+            # Set FOV and sensor range to match environment settings
+            nom_controller.fov_angle = FOV
+            nom_controller.sensor_range = MAX_SENSOR_DISTANCE
+            if args.use_info_gain:
+                print(f"Information gain enabled with weight {args.info_gain_weight}")
+        else:  # dualguard_mppi
+            print("Using DualGuard MPPI planner")
+            nom_controller = DualGuardNavigator(
+                hj_solver=solver,
+                safety_threshold=args.safety_threshold,
+                gradient_scale=args.gradient_scale,
+                robot_radius=env.model.world.agent_radius,
+                use_info_gain=args.use_info_gain,
+                info_gain_weight=args.info_gain_weight
             )
-
-        # Take a step in the environment
-        observations, rewards, terminations, truncations, all_done, infos = env.step(
-            {"0": safe_mppi_action}
-        )
-        # observations, rewards, terminations, truncations, all_done, infos = env.step(
-        #     {"0": [0,0]}
-        # )
+            # Set FOV and sensor range to match environment settings
+            nom_controller.fov_angle = FOV
+            nom_controller.sensor_range = MAX_SENSOR_DISTANCE
+            if args.use_info_gain:
+                print(f"Information gain enabled with weight {args.info_gain_weight}")
         
-        # Check for collision
-        reward = rewards["0"]
-        if reward < 0:
-            print("AGENT COLLIDED.")
+        # Start video recording for this trial if enabled
+        if args.record:
+            visualizer.start_video_recording()
+        
+        # Initialize trial data
+        steps = 0
+        collision = False
+        reached_goal = False
+        
+        # Main simulation loop for this trial
+        for step in range(args.max_steps_per_trial):
+            steps += 1
             
-        # Reset if episode is done
-        if all_done:
-            observations, infos = env.reset()
-            occupancy_map.reset()
-            visualizer.reset()
+            # Get current observation
+            observation = observations["0"]
+            lidar_distances = observation[0:N_SENSORS]
+            vehicle_x = observation[2 * N_SENSORS]
+            vehicle_y = observation[2 * N_SENSORS + 1]
+            vehicle_angle = observation[2 * N_SENSORS + 2]
+            vehicle_x_velocity = observation[2 * N_SENSORS + 3]
+            vehicle_y_velocity = observation[2 * N_SENSORS + 4]
             
-            # Get initial observations after reset
-            lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
-                observations["0"][0:N_SENSORS],
-                observations["0"][2 * N_SENSORS],
-                observations["0"][2 * N_SENSORS + 1],
-                observations["0"][2 * N_SENSORS + 2],
+            current_vel = calculate_linear_velocity(vehicle_x_velocity, vehicle_y_velocity, vehicle_angle)
+            
+            # Render environment
+            env.render()
+
+            # Update occupancy map from lidar observations
+            occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle, fov=FOV)
+
+            # Get initial safe set (free cells)
+            initial_safe_set = occupancy_map.grid == FREE
+
+            # Set up MPPI controller
+            scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
+            robot_goal = env.state[0].dest_coord
+            
+            # Configure MPPI controller
+            nom_controller.set_goal(robot_goal)
+            nom_controller.set_map(
+                occupancy_map.grid != FREE,  # Obstacle map (not free = obstacle)
+                [occupancy_map.grid_width, occupancy_map.grid_height],  # Grid dimensions (width, height) - matches warm start solver convention
+                scaled_origin,  # Origin
+                MAP_RESOLUTION,  # Resolution
+            )
+            nom_controller.set_state((vehicle_x, vehicle_y), vehicle_angle, current_vel)
+
+            # Compute HJ reachability
+            values = solver.solve(
+                initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
             )
             
-            # Mark initial free space
-            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, MARK_FREE_RADIUS)
+            # Get nominal action from MPPI
+            mppi_action = nom_controller.get_command().cpu().numpy()
+
+            # Get and visualize MPPI trajectories
+            sampled_trajectories = nom_controller.get_sampled_trajectories()
+            chosen_trajectory = nom_controller.get_chosen_trajectory()
+
+            # Visualize MPPI trajectories
+            visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal)
+
+            # If using DualGuard MPPI, set the HJ values
+            if args.planner == "dualguard_mppi" and values is not None:
+                # Compute gradients for DualGuard MPPI
+                values_grad = np.gradient(values)
+                # Set the HJ values and gradients in the DualGuard MPPI planner
+                nom_controller.set_hj_values(values, values_grad)
+                # Get the action from DualGuard MPPI (which already incorporates safety)
+                safe_mppi_action = mppi_action
+                has_intervened = False  # DualGuard handles safety internally
+            # If using vanilla MPPI with HJ safety filter
+            elif args.planner == "mppi" and values is not None:
+                # Compute safe action
+                safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
+                    np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
+                    mppi_action,
+                    action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
+                    values=values,
+                )
+            else:
+                safe_mppi_action = mppi_action
+                has_intervened = False
+                
+            # Visualize HJ level set if values are available
+            if values is not None:
+                fail_set = np.logical_not(initial_safe_set)
+                visualizer.visualize_hj_level_set(
+                    solver,
+                    values,
+                    fail_set,
+                    vehicle_x,
+                    vehicle_y,
+                    vehicle_angle,
+                    current_vel,
+                    safety_intervening=has_intervened,
+                )
             
-            # Reinitialize solver
-            solver = WarmStartSolver(config=config)
+            # Capture frame for video if recording
+            if args.record:
+                visualizer.capture_frame()
+
+            # Take a step in the environment
+            observations, rewards, terminations, truncations, all_done, infos = env.step(
+                {"0": safe_mppi_action}
+            )
             
-            # If using DualGuard MPPI, update the HJ solver reference
-            if args.planner == "dualguard_mppi":
-                nom_controller.set_hj_solver(solver)
+            # Check for collision
+            reward = rewards["0"]
+            if reward < 0:
+                print("AGENT COLLIDED.")
+                collision = True
+            
+            # Check if goal reached
+            if reward > 0:
+                print("GOAL REACHED!")
+                reached_goal = True
+            
+            # End trial if episode is done
+            if all_done:
+                break
+        
+        # Stop video recording for this trial
+        if args.record:
+            visualizer.stop_video_recording()
+        
+        # Record trial data
+        if args.record:
+            with open(data_path, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([trial+1, steps, collision, reached_goal])
+        
+        # Reset for next trial
+        occupancy_map.reset()
+        visualizer.reset()
+        
+        # Reinitialize solver
+        solver = WarmStartSolver(config=config)
+        
+        print(f"Trial {trial+1} completed: steps={steps}, collision={collision}, reached_goal={reached_goal}")
 
     # Clean up
     env.close()
