@@ -31,22 +31,22 @@ from src.dualguard_mppi import DualGuardNavigator
 # Environment setup
 MAP_RESOLUTION = 0.25  # units per cell
 N_SENSORS = 128
-MAX_SENSOR_DISTANCE = 50.0
+MAX_SENSOR_DISTANCE = 10.0
 # MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
-FOV = np.pi / 3  # 45-degree view centered at the front of the agent
-FOV = np.pi * 2
+# FOV = np.pi / 3  # 45-degree view centered at the front of the agent
+# FOV = np.pi * 2
 
 MARK_FREE_RADIUS = 3.0
 
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
 THETA_MIN = 0
-THETA_MAX = 2 * np.pi + 1.0  # add an epsilon to avoid numerical issues
+THETA_MAX = 2 * np.pi# add an epsilon to avoid numerical issues
 THETA_NUM_CELLS = 13
-VELOCITY_MIN = -1.41 # Minimum velocity
-VELOCITY_MAX = 1.41 + 0.7  # add an epsilon to avoid numerical issues
+VELOCITY_MIN = -1.414 # Minimum velocity
+VELOCITY_MAX = 1.414 # add an epsilon to avoid numerical issues
 VELOCITY_NUM_CELLS = 21
 
 # Cell state constants
@@ -890,7 +890,7 @@ def main():
         )
     
     # Main simulation loop
-    for _ in range(3000):
+    for _ in range(30000):
         # Get current observation
         observation = observations["0"]
         lidar_distances = observation[0:N_SENSORS]
