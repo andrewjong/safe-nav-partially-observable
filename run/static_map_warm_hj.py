@@ -166,7 +166,7 @@ def main():
         if values is None:
             continue
 
-        state_ind = solver._state_to_grid(state[:3])
+        state_ind = solver.state_to_grid(state[:3])
         z = values[:,:,state_ind[2]].T
         z_mask = z > 0.1
 

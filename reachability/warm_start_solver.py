@@ -281,7 +281,7 @@ class WarmStartSolver:
         checks if `state` is safe given most recent Value function
         """
         # TODO: modify for other systems
-        state_ind = self._state_to_grid(state)
+        state_ind = self.state_to_grid(state)
         value = values[*state_ind]
         try:
             initial_value = self.initial_values[*state_ind]
@@ -325,7 +325,7 @@ class WarmStartSolver:
         # If the current state is not safe, compute a safe action using grid search
         if not is_safe:
             # Get the state indices in the grid
-            state_ind = self._state_to_grid(state)
+            state_ind = self.state_to_grid(state)
             
             # Extract the gradient at the current state
             grad_x = values_grad[0][*state_ind]
@@ -407,7 +407,7 @@ class WarmStartSolver:
 
         return action, value, initial_value, has_intervened
 
-    def _state_to_grid(self, state):
+    def state_to_grid(self, state):
         grid = self.problem_definition["grid"]
         state_ind = np.array(grid.nearest_index(state)) - 1
         return state_ind

@@ -559,6 +559,7 @@ class MapVisualizer:
 
     def visualize_hj_level_set(
         self,
+        solver,
         values,
         fail_set,
         vehicle_x,
@@ -590,15 +591,11 @@ class MapVisualizer:
         ax = self.hj_fig.add_subplot(111)
 
         # Get the current slice of the value function at the current vehicle angle
-        angle_index = min(
-            int((vehicle_angle % (2 * np.pi)) / (2 * np.pi) * (values.shape[2] - 1)),
-            values.shape[2] - 1,
-        )
-        velocity_index = int(
-            round(
-                (vehicle_velocity - VELOCITY_MIN) / (VELOCITY_MAX - VELOCITY_MIN) * (VELOCITY_NUM_CELLS - 1)
-            )
-        )
+        state = np.array([vehicle_x, vehicle_y, vehicle_angle, vehicle_velocity])
+
+        state_ind = solver.state_to_grid(state)
+        angle_index = state_ind[2]
+        velocity_index = state_ind[3]
         value_slice = np.array(values[:, :, angle_index, velocity_index])
 
         # Create coordinate meshgrid for plotting
@@ -909,6 +906,7 @@ def main():
             # Visualize HJ level set
             fail_set = np.logical_not(initial_safe_set)
             visualizer.visualize_hj_level_set(
+                solver,
                 values,
                 fail_set,
                 vehicle_x,
