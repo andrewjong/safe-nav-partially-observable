@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 # Text color constants
 BLACK   = "\033[30m"
@@ -20,6 +21,30 @@ BOLD_BLUE    = "\033[1;34m"
 BOLD_MAGENTA = "\033[1;35m"
 BOLD_CYAN    = "\033[1;36m"
 BOLD_WHITE   = "\033[1;37m"
+
+def calculate_linear_velocity(vx, vy, vehicle_angle_rad):
+    """
+    Calculate linear velocity from x and y velocity components,
+    with sign indicating forward/backward motion.
+    
+    Parameters:
+    vx (float): X component of velocity
+    vy (float): Y component of velocity
+    vehicle_angle_rad (float): Vehicle heading angle in radians
+                              (0 radians is typically pointing along positive x-axis)
+    
+    Returns:
+    float: Linear velocity with sign (positive = forward, negative = backward)
+    """
+    # Calculate unit vector in vehicle's heading direction
+    heading_x = np.cos(vehicle_angle_rad)
+    heading_y = np.sin(vehicle_angle_rad)
+    
+    # Project velocity onto heading direction using dot product
+    # This gives the magnitude of velocity in the direction of heading
+    linear_velocity = vx * heading_x + vy * heading_y
+    
+    return linear_velocity
 
 
 def dubins_dynamics_tensor(

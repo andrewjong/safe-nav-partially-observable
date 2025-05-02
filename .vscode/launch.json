@@ -12,26 +12,20 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "program": "${workspaceFolder}/run/racecar_warm_hj.py",
+            "args": ["--world", "14x14Sparse"],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal"
         },
         {
-            "name": "Python Debugger: Emanuel's",
+            "name": "Python Debugger: RaceCar Warm HJ Dual",
             "type": "debugpy",
             "request": "launch",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },
-            "program": "${workspaceFolder}/run/static_map_warm_hj.py",
+            "program": "${workspaceFolder}/run/racecar_warm_hj.py",
+            "args": ["--planner", "dualguard_mppi", "--world", "14x14Sparse"],
             "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Python Debugger: RaceCar Simple Usage",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/racecar_gym/examples/gym_examples/simple_usage.py",
-            "cwd": "${workspaceFolder}/racecar_gym/examples/gym_examples",
             "console": "integratedTerminal"
         },
     ]

@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import posggym
+from utils import calculate_linear_velocity
 
 from skimage.morphology import dilation, disk
 # Local imports
@@ -965,7 +966,7 @@ def main():
         ]),
         mode="brt",
         accuracy="medium",
-        superlevel_set_epsilon=0.8,
+        superlevel_set_epsilon=0.5,
         converged_values=None,
         until_convergent=True,
         print_progress=False,
@@ -1028,8 +1029,8 @@ def main():
         vehicle_x_velocity = observation[2 * N_SENSORS + 3]
         vehicle_y_velocity = observation[2 * N_SENSORS + 4]
         
-        # Calculate current velocity magnitude
-        current_vel = np.linalg.norm(np.array([vehicle_x_velocity, vehicle_y_velocity]))
+        current_vel = calculate_linear_velocity(vehicle_x_velocity, vehicle_y_velocity, vehicle_angle)
+
         
         # Render environment
         env.render()
@@ -1053,6 +1054,11 @@ def main():
             MAP_RESOLUTION,  # Resolution
         )
         nom_controller.set_state((vehicle_x, vehicle_y), vehicle_angle, current_vel)
+
+        # Compute HJ reachability
+        values = solver.solve(
+            initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
+        )
         
         # Get nominal action from MPPI
         mppi_action = nom_controller.get_command().cpu().numpy()
@@ -1063,11 +1069,6 @@ def main():
 
         # Visualize MPPI trajectories
         visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal)
-
-        # Compute HJ reachability
-        values = solver.solve(
-            initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
-        )
 
         # If using DualGuard MPPI, set the HJ values
         if args.planner == "dualguard_mppi" and values is not None:
