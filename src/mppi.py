@@ -583,7 +583,7 @@ class Navigator:
                     in_bounds = (idx_x >= 0) & (idx_x < map_width) & (idx_y >= 0) & (idx_y < map_height)
                     
                     # Get map values for in-bounds positions
-                    map_values = torch.zeros_like(in_bounds, dtype=torch.int8)
+                    map_values = torch.zeros_like(in_bounds, dtype=self._map_torch.dtype)
                     if torch.any(in_bounds):
                         map_values[in_bounds] = self._map_torch[idx_y[in_bounds], idx_x[in_bounds]]
                     
