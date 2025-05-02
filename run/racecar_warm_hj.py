@@ -36,10 +36,10 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
 THETA_MIN = -np.pi
 THETA_MAX = np.pi
-THETA_NUM_CELLS = 20
+THETA_NUM_CELLS = 10
 VELOCITY_MIN = -1.0
 VELOCITY_MAX = 1.0
-VELOCITY_NUM_CELLS = 5
+VELOCITY_NUM_CELLS = 10
 
 # Cell state constants
 UNSEEN = 0
@@ -717,9 +717,10 @@ def main():
     env = posggym.make(
         "DrivingContinuous-v0",
         # world="30x30OneWallDiagonal",
+        world="30x30EmptyStraight",
         # world="14x14Empty",
         # world="30x30Empty",
-        world="30x30ScatteredObstacleField",
+        # world="30x30ScatteredObstacleField",
         # world="14x14Sparse",
         num_agents=1,
         n_sensors=N_SENSORS,
@@ -830,7 +831,7 @@ def main():
             safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
                 mppi_action,
-                action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
+                action_bounds=np.array([[-np.pi/4 * 0, np.pi/4 * 0], [-0.25, 0.25]]),
                 values=values,
             )
 
