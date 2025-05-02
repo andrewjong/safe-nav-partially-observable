@@ -621,7 +621,7 @@ class MapVisualizer:
         occupancy_bounds = [-0.5, 0.5, 1.5, 2.5]
         occupancy_norm = plt.cm.colors.BoundaryNorm(occupancy_bounds, occupancy_cmap.N)
         ax.pcolormesh(
-            X, Y, self.occupancy_map.grid, cmap=occupancy_cmap, norm=occupancy_norm, alpha=0.3
+            X, Y, self.occupancy_map.grid.T, cmap=occupancy_cmap, norm=occupancy_norm, alpha=0.3
         )
 
         # Plot the value function as a discrete heat map
@@ -636,8 +636,9 @@ class MapVisualizer:
         # )
         
         # Instead, use pcolormesh for a discrete cell-by-cell visualization
+        # Note: value_slice.T to match the warm start solver convention
         value_heatmap = ax.pcolormesh(
-            X, Y, value_slice, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax, 
+            X, Y, value_slice.T, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax, 
             edgecolors='face', shading='auto'
         )
         cbar = plt.colorbar(value_heatmap, ax=ax, label="Value Function")
@@ -651,8 +652,9 @@ class MapVisualizer:
             unsafe_display = np.where(unsafe_mask, 1, np.nan)
             
             # Plot the unsafe cells with a red color and visible cell edges
+            # Note: unsafe_display.T to match the warm start solver convention
             unsafe_boundary = ax.pcolormesh(
-                X, Y, unsafe_display, 
+                X, Y, unsafe_display.T, 
                 cmap=plt.cm.colors.ListedColormap(["red"]),
                 # cmap="Reds",
                 alpha=0.5,
@@ -674,9 +676,10 @@ class MapVisualizer:
                     y_indices, x_indices = np.where(labeled_mask == largest_region)
                     if len(y_indices) > 0:
                         # Calculate center of the region
-                        center_y = int(np.mean(y_indices))
                         center_x = int(np.mean(x_indices))
-                        # Add text annotation
+                        center_y = int(np.mean(y_indices))
+                        # Add text annotation - note the coordinate order for X and Y
+                        # X[center_y, center_x] means X at row=center_y, col=center_x
                         ax.text(X[center_y, center_x], Y[center_y, center_x], 
                                 "Unsafe", color='white', fontweight='bold',
                                 ha='center', va='center')
@@ -695,8 +698,9 @@ class MapVisualizer:
             fail_display = np.where(fail_mask, 1, np.nan)
             
             # Plot the fail cells with a black color and visible cell edges
+            # Note: fail_display.T to match the warm start solver convention
             fail_boundary = ax.pcolormesh(
-                X, Y, fail_display, 
+                X, Y, fail_display.T, 
                 cmap=plt.cm.colors.ListedColormap(['black']),
                 alpha=0.5,
                 edgecolors='none',
@@ -716,9 +720,10 @@ class MapVisualizer:
                     y_indices, x_indices = np.where(labeled_mask == largest_region)
                     if len(y_indices) > 0:
                         # Calculate center of the region
-                        center_y = int(np.mean(y_indices))
                         center_x = int(np.mean(x_indices))
-                        # Add text annotation
+                        center_y = int(np.mean(y_indices))
+                        # Add text annotation - note the coordinate order for X and Y
+                        # X[center_y, center_x] means X at row=center_y, col=center_x
                         ax.text(X[center_y, center_x], Y[center_y, center_x], 
                                 "Fail", color='white', fontweight='bold',
                                 ha='center', va='center')
@@ -927,7 +932,7 @@ def main():
         nom_controller.set_goal(robot_goal)
         nom_controller.set_map(
             occupancy_map.grid != FREE,  # Obstacle map (not free = obstacle)
-            [occupancy_map.grid_height, occupancy_map.grid_width],  # Grid dimensions
+            [occupancy_map.grid_width, occupancy_map.grid_height],  # Grid dimensions (width, height)
             scaled_origin,  # Origin
             MAP_RESOLUTION,  # Resolution
         )
