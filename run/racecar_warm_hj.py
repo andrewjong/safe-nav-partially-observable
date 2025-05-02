@@ -30,7 +30,7 @@ from src.dualguard_mppi import DualGuardNavigator
 
 # Environment setup
 MAP_RESOLUTION = 0.5  # units per cell
-N_SENSORS = 128
+N_SENSORS = 16
 # MAX_SENSOR_DISTANCE = 10.0
 MAX_SENSOR_DISTANCE = 5.0
 # MAX_SENSOR_DISTANCE = 0.1
