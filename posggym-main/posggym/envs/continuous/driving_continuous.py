@@ -158,6 +158,9 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
     - `n_sensors` - the number of sensor lines eminating from the agent. The agent will
          observe at `n_sensors` equidistance intervals over `[0, 2*pi]`
          (default = `16`).
+    - `agent_radius` - the radius of the agent for collision detection (default = `0.1`).
+    - `goal_radius` - the radius of the goal region. If None, it defaults to the agent_radius
+         (default = `None`).
 
     Available variants
     ------------------
@@ -212,10 +215,20 @@ class DrivingContinuousEnv(DefaultEnv[DState, DObs, DAction]):
         obs_dist: float = 5.0,
         n_sensors: int = 16,
         fov: float = 2 * np.pi,  # Default to full 360-degree field of view
+        agent_radius: float = 0.1,
+        goal_radius: float = None,
         render_mode: Optional[str] = None,
     ):
         super().__init__(
-            DrivingContinuousModel(world, num_agents, obs_dist, n_sensors, fov),
+            DrivingContinuousModel(
+                world, 
+                num_agents, 
+                obs_dist, 
+                n_sensors, 
+                fov,
+                agent_radius=agent_radius,
+                goal_radius=goal_radius
+            ),
             render_mode=render_mode,
         )
         self.window_surface = None
@@ -429,6 +442,8 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
         obs_dist: float,
         n_sensors: int,
         fov: float = 2 * np.pi,
+        agent_radius: float = 0.1,
+        goal_radius: float = None,
     ):
         assert 0 < fov <= 2 * np.pi, "fov must be in (0, 2 * pi]"
         if isinstance(world, str):
@@ -438,7 +453,10 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
             )
             world_info = SUPPORTED_WORLDS[world]
             world = parseworld_str(
-                world_info["world_str"], world_info["supported_num_agents"]
+                world_info["world_str"], 
+                world_info["supported_num_agents"],
+                agent_radius=agent_radius,
+                goal_radius=goal_radius
             )
         assert 0 < num_agents <= world.supported_num_agents, (
             f"Supplied DrivingWorld `{world}` does not support {num_agents} "
@@ -721,7 +739,7 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
                 body=next_v_body_state,
                 dest_coord=state_i.dest_coord,
                 status=np.array(
-                    [int(dest_distance <= self.world.agent_radius), int(crashed)],
+                    [int(dest_distance <= self.world.goal_radius), int(crashed)],
                     dtype=np.int8,
                 ),
                 min_dest_dist=np.array([min_dest_dist], dtype=np.float32),
@@ -811,16 +829,20 @@ class DrivingWorld(SquareContinuousWorld):
         blocked_coords: Set[Coord],
         start_coords: List[Set[FloatCoord]],
         dest_coords: List[Set[FloatCoord]],
+        agent_radius: float = 0.1,
+        goal_radius: float = None,
     ):
         interior_walls = generate_interior_walls(size, size, blocked_coords)
         super().__init__(
             size=size,
             blocks=None,
             interior_walls=interior_walls,
-            agent_radius=0.1,
+            agent_radius=agent_radius,
             border_thickness=0.01,
             enable_agent_collisions=True,
         )
+        # If goal_radius is not specified, use agent_radius as default
+        self.goal_radius = goal_radius if goal_radius is not None else agent_radius
         assert len(start_coords) == len(dest_coords)
         self._blocked_coords = blocked_coords
         self.start_coords = start_coords
@@ -863,8 +885,14 @@ class DrivingWorld(SquareContinuousWorld):
         return int(max([max(d.values()) for d in self.shortest_paths.values()]))
 
 
-def parseworld_str(world_str: str, supported_num_agents: int) -> DrivingWorld:
+def parseworld_str(world_str: str, supported_num_agents: int, agent_radius: float = 0.1, goal_radius: float = None) -> DrivingWorld:
     """Parse a str representation of a world.
+    
+    Args:
+        world_str: String representation of the world.
+        supported_num_agents: Number of agents supported by the world.
+        agent_radius: Radius of the agent for collision detection.
+        goal_radius: Radius of the goal region. If None, defaults to agent_radius.
 
     Notes on world str representation:
 
@@ -960,6 +988,8 @@ def parseworld_str(world_str: str, supported_num_agents: int) -> DrivingWorld:
         blocked_coords=blocked_coords,
         start_coords=start_coords,
         dest_coords=dest_coords,
+        agent_radius=agent_radius,
+        goal_radius=goal_radius,
     )
 
 
