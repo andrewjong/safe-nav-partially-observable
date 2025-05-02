@@ -39,6 +39,76 @@ class DualGuardMPPI(MPPI):
         else:
             self.hj_values_grad = values_grad
     
+    def _compute_rollout_costs(self, perturbed_actions):
+        """
+        Optimized version of rollout cost computation for better performance.
+        
+        Args:
+            perturbed_actions: Actions to roll out
+            
+        Returns:
+            cost_total: Total cost of each trajectory
+            states: States visited in each trajectory
+            actions: Actions taken in each trajectory
+        """
+        K, T = perturbed_actions.shape[0], perturbed_actions.shape[1] // self.nu
+        cost_total = torch.zeros(K, device=self.d, dtype=self.dtype)
+        cost_samples = torch.zeros(self.M, K, device=self.d, dtype=self.dtype)
+        cost_var = torch.zeros(K, device=self.d, dtype=self.dtype)
+        
+        # Initialize state
+        if hasattr(self, "init_cov"):
+            eps = torch.randn(
+                K, self.nx, device=self.d, dtype=self.dtype
+            ) @ self.init_cov
+            state = self.state.view(1, -1).repeat(K, 1) + eps
+        else:
+            state = self.state.view(1, -1).repeat(K, 1)
+        
+        # Repeat state for multiple rollouts
+        state = state.repeat(self.M, 1, 1)
+        
+        # Pre-allocate tensors for states and actions
+        states_list = []
+        actions_list = []
+        
+        # Perform rollouts in parallel
+        for t in range(T):
+            # Scale and repeat actions
+            u = self.u_scale * perturbed_actions[:, t].repeat(self.M, 1, 1)
+            
+            # Apply dynamics
+            state = self._dynamics(state, u, t, self.dt)
+            
+            # Compute running cost
+            c = self._running_cost(state, u, t)
+            cost_samples += c
+            
+            # Compute variance if using multiple rollouts
+            if self.M > 1:
+                cost_var += c.var(dim=0) * (self.rollout_var_discount**t)
+            
+            # Save states and actions
+            states_list.append(state)
+            actions_list.append(u)
+        
+        # Stack states and actions
+        actions = torch.stack(actions_list, dim=-2)
+        states = torch.stack(states_list, dim=-2)
+        
+        # Add terminal state cost if applicable
+        if self.terminal_state_cost:
+            c = self._terminal_state_cost(states[..., -1, :], actions[..., -1, :])
+            cost_samples += c
+        
+        # Compute mean cost across rollouts
+        cost_total += cost_samples.mean(dim=0)
+        
+        # Add variance cost
+        cost_total += cost_var * self.rollout_var_cost
+        
+        return cost_total, states, actions
+    
     def _compute_total_cost_batch(self):
         """
         Override the sampling process to incorporate HJ reachability guidance.
@@ -122,20 +192,20 @@ class DualGuardMPPI(MPPI):
             # Convert to torch tensor
             lhs_tensor = torch.tensor(lhs, device=self.d, dtype=self.dtype)
             
-            # Scale the noise based on the gradient direction
-            # This adds a bias to the noise that pushes it toward safer regions
-            for t in range(self.T):
-                # Scale the guidance based on time step (stronger guidance for earlier steps)
-                time_scale = 1.0 / (1.0 + 0.1 * t)
-                
-                # Apply the guidance to the noise
-                safety_bias = time_scale * self.gradient_scale * lhs_tensor
-                self.noise[:, t] += safety_bias
+            # Create time scaling factors for all time steps at once
+            time_scales = 1.0 / (1.0 + 0.1 * torch.arange(self.T, device=self.d, dtype=self.dtype))
+            
+            # Compute safety bias for all time steps at once
+            safety_bias = self.gradient_scale * lhs_tensor.unsqueeze(0).unsqueeze(0) * time_scales.unsqueeze(1)
+            
+            # Apply the guidance to all noise samples at once
+            self.noise += safety_bias
     
     def _apply_safety_cost_to_rollouts(self):
         """
         Apply an additional safety cost to the rollouts based on HJ values.
         This penalizes trajectories that enter unsafe regions.
+        Optimized with batch processing for better performance.
         """
         # Get the states from the rollouts
         # states shape: M x K x T x nx
@@ -144,21 +214,28 @@ class DualGuardMPPI(MPPI):
         # Initialize safety cost
         safety_cost = torch.zeros((M, K), device=self.d, dtype=self.dtype)
         
-        # Check each state in the trajectory for safety
+        # Create time penalty factors for all time steps
+        time_penalties = 10.0 / (1.0 + 0.1 * np.arange(T))
+        
+        # Process in batches to avoid memory issues
+        batch_size = 100  # Adjust based on available memory
+        
         for m in range(M):
-            for k in range(K):
+            for k_batch in range(0, K, batch_size):
+                k_end = min(k_batch + batch_size, K)
+                k_range = range(k_batch, k_end)
+                
                 for t in range(T):
-                    # Get the state
-                    state = self.states[m, k, t].cpu().numpy()
+                    # Get states for this batch and time step
+                    batch_states = self.states[m, k_batch:k_end, t].cpu().numpy()
                     
-                    # Check if the state is safe
-                    is_safe, value, _ = self.hj_solver.check_if_safe(state, self.hj_values)
-                    
-                    # Add a large cost for unsafe states
-                    if not is_safe:
-                        # Penalize more for earlier violations
-                        time_penalty = 10.0 / (1.0 + 0.1 * t)
-                        safety_cost[m, k] += time_penalty * 100.0
+                    # Check safety for all states in the batch
+                    for i, k in enumerate(k_range):
+                        state = batch_states[i]
+                        is_safe, _, _ = self.hj_solver.check_if_safe(state, self.hj_values)
+                        
+                        if not is_safe:
+                            safety_cost[m, k] += time_penalties[t] * 100.0
         
         # Add the safety cost to the total cost
         self.cost_total += safety_cost.mean(dim=0)
@@ -166,6 +243,7 @@ class DualGuardMPPI(MPPI):
     def command(self, state):
         """
         Override the command method to ensure the final trajectory is safe.
+        Optimized for better performance.
         
         Args:
             state: Current state of the system
@@ -186,21 +264,42 @@ class DualGuardMPPI(MPPI):
         # Get the chosen trajectory
         chosen_trajectory = self.get_chosen_trajectory(state_np)
         
-        # Check each state in the trajectory for safety
-        for t in range(len(chosen_trajectory)):
-            traj_state = chosen_trajectory[t]
-            is_safe, _, _ = self.hj_solver.check_if_safe(traj_state, self.hj_values)
+        # Convert trajectory to numpy array for faster processing
+        trajectory_array = np.array(chosen_trajectory)
+        
+        # Check if any state in the trajectory is unsafe
+        is_unsafe = False
+        
+        # Process trajectory in batches for efficiency
+        batch_size = 10  # Adjust based on performance
+        num_states = len(trajectory_array)
+        
+        for i in range(0, num_states, batch_size):
+            end_idx = min(i + batch_size, num_states)
+            batch = trajectory_array[i:end_idx]
             
-            if not is_safe:
-                # If any state in the trajectory is unsafe, compute a safe action
-                action, _, _, _ = self.hj_solver.compute_safe_control(
-                    state_np,
-                    nominal_action.cpu().numpy(),
-                    action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
-                    values=self.hj_values,
-                    values_grad=self.hj_values_grad
-                )
-                return torch.tensor(action, device=self.d, dtype=self.dtype)
+            # Check each state in the batch
+            for j in range(len(batch)):
+                traj_state = batch[j]
+                is_safe, _, _ = self.hj_solver.check_if_safe(traj_state, self.hj_values)
+                
+                if not is_safe:
+                    is_unsafe = True
+                    break
+            
+            if is_unsafe:
+                break
+        
+        if is_unsafe:
+            # If any state in the trajectory is unsafe, compute a safe action
+            action, _, _, _ = self.hj_solver.compute_safe_control(
+                state_np,
+                nominal_action.cpu().numpy(),
+                action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
+                values=self.hj_values,
+                values_grad=self.hj_values_grad
+            )
+            return torch.tensor(action, device=self.d, dtype=self.dtype)
         
         # If the entire trajectory is safe, return the nominal action
         return nominal_action
@@ -208,6 +307,7 @@ class DualGuardMPPI(MPPI):
     def get_chosen_trajectory(self, state):
         """
         Get the chosen trajectory based on the current control sequence.
+        Optimized for better performance.
         
         Args:
             state: Current state of the system
@@ -217,16 +317,23 @@ class DualGuardMPPI(MPPI):
         """
         # Initialize trajectory with current state
         trajectory = [state]
+        current_state = state.copy()
+        
+        # Convert control sequence to numpy for faster processing
+        U_np = self.U.cpu().numpy()
+        
+        # Pre-allocate tensor for dynamics computation
+        state_tensor = torch.tensor(current_state[np.newaxis, :], dtype=self.dtype, device=self.d)
         
         # Roll out the trajectory using the current control sequence
         for t in range(self.T):
-            action = self.U[t].cpu().numpy()
-            state = dubins_dynamics_tensor(
-                torch.tensor(state[np.newaxis, :]), 
-                torch.tensor(action[np.newaxis, :]), 
-                self.dt
-            )[0].cpu().numpy()
-            trajectory.append(state)
+            action = U_np[t]
+            action_tensor = torch.tensor(action[np.newaxis, :], dtype=self.dtype, device=self.d)
+            
+            # Update state using dynamics
+            state_tensor = dubins_dynamics_tensor(state_tensor, action_tensor, self.dt)
+            current_state = state_tensor[0].cpu().numpy()
+            trajectory.append(current_state.copy())
             
         return trajectory
 
