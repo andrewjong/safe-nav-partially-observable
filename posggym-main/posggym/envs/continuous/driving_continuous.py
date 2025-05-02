@@ -817,7 +817,7 @@ class DrivingWorld(SquareContinuousWorld):
             size=size,
             blocks=None,
             interior_walls=interior_walls,
-            agent_radius=0.4,
+            agent_radius=0.1,
             border_thickness=0.01,
             enable_agent_collisions=True,
         )

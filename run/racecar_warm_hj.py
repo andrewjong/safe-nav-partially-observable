@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import posggym
 
+from skimage.morphology import dilation, disk
 # Local imports
 from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfig
 from src.mppi import Navigator
@@ -29,7 +30,7 @@ from src.mppi import Navigator
 MAP_RESOLUTION = 0.25  # units per cell
 N_SENSORS = 128
 MAX_SENSOR_DISTANCE = 50.0
-MAX_SENSOR_DISTANCE = 5.0
+# MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 FOV = np.pi / 3  # 45-degree view centered at the front of the agent
@@ -43,7 +44,7 @@ THETA_MIN = 0
 THETA_MAX = 2 * np.pi + 1.0  # add an epsilon to avoid numerical issues
 THETA_NUM_CELLS = 13
 VELOCITY_MIN = -1.41 # Minimum velocity
-VELOCITY_MAX = 1.41 + 0.1  # add an epsilon to avoid numerical issues
+VELOCITY_MAX = 1.41 + 0.7  # add an epsilon to avoid numerical issues
 VELOCITY_NUM_CELLS = 21
 
 # Cell state constants
@@ -637,7 +638,7 @@ class MapVisualizer:
         # Plot the unsafe boundary by tracing cell boundaries
         try:
             # Create a binary mask for unsafe cells (value <= 0)
-            unsafe_mask = value_slice <= 0
+            unsafe_mask = value_slice <= solver.config.superlevel_set_epsilon
             
             # Create a new array with NaN for safe cells and 1 for unsafe cells
             unsafe_display = np.where(unsafe_mask, 1, np.nan)

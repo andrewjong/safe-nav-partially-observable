@@ -24,7 +24,7 @@ class WarmStartSolverConfig:
     domain: np.ndarray
     mode: str  # "brs" or "brt"
     accuracy: str  # "low", "medium", "high", "very_high"
-    superlevel_set_epsilon: float = 0.1
+    superlevel_set_epsilon: float = 0.5
     converged_values: np.ndarray | None = None
     until_convergent: bool = True
     print_progress: bool = True
@@ -365,6 +365,7 @@ class WarmStartSolver:
             # Initialize variables to track the best action
             best_action = nominal_action.copy()
             min_distance = float("inf")
+            best_safety_value = float("-inf")
 
             # Perform grid search
             for ang_vel in [0]: #angular_vel_grid:
@@ -377,20 +378,26 @@ class WarmStartSolver:
 
                     # If the control is safe (safety_value >= 0), check if it's closer to nominal
                     if safety_value >= 0:
-                        # Calculate distance to nominal action
-                        distance = np.sum((u - nominal_action) ** 2)
+                        # # Calculate distance to nominal action
+                        # distance = np.sum((u - nominal_action) ** 2)
 
-                        # Update best action if this one is closer to nominal
-                        if distance < min_distance:
-                            min_distance = distance
+                        # # Update best action if this one is closer to nominal
+                        # if distance < min_distance:
+                        #     min_distance = distance
+                        #     best_action = u.copy()
+                        if safety_value > best_safety_value:
+                            best_safety_value = safety_value
                             best_action = u.copy()
 
             # If we found a safe action, use it
-            if min_distance < float("inf"):
+            # if min_distance < float("inf"):
+            if best_safety_value > float("-inf"):
                 action = best_action
+                print("Safe action found in grid search")
             else:
                 # If no safe action was found in the grid, use a fallback strategy
                 # Move in the direction of the gradient of the value function
+                print("No safe action found in grid search, using gradient-based fallback")
                 if np.linalg.norm(lhs) > 1e-6:  # Ensure we don't divide by zero
                     control_direction = lhs / np.linalg.norm(lhs)  # Normalize
 
@@ -414,6 +421,7 @@ class WarmStartSolver:
     def state_to_grid(self, state):
         grid = self.problem_definition["grid"]
         state_ind = np.array(grid.nearest_index(state))
+        state_ind = np.clip(state_ind, 0, np.array(self.config.domain_cells) - 1)
         return state_ind
 
     def plot_zero_level(
