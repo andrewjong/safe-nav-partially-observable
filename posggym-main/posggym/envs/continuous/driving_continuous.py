@@ -635,8 +635,8 @@ class DrivingContinuousModel(M.POSGModel[DState, DObs, DAction]):
 
             # ensure vx, vy is in [-1, 1]
             # with collisions, etc pymunk can sometime push it over this limit
-            next_v_body_state[3] = max(-1.0, min(1.0, next_v_body_state[3]))
-            next_v_body_state[4] = max(-1.0, min(1.0, next_v_body_state[4]))
+            next_v_body_state[3] = max(-0.1, min(1.0, next_v_body_state[3]))
+            next_v_body_state[4] = max(-0.1, min(1.0, next_v_body_state[4]))
 
             state_i = state[idx]
             next_v_coords = next_v_body_state[:2]
@@ -1037,9 +1037,9 @@ SUPPORTED_WORLDS: Dict[str, Dict[str, Any]] = {
             "..............\n"
             "..............\n"
             "..............\n"
-            ".....#........\n"
-            "...+.#......-.\n"
-            ".....#........\n"
+            ".........#....\n"
+            "...+.....#..-.\n"
+            ".........#....\n"
             "..............\n"
             "..............\n"
             "..............\n"

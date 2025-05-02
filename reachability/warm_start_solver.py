@@ -273,7 +273,7 @@ class WarmStartSolver:
         )
 
         self.last_values = values
-        self.last_values = None
+        self.last_values = None  # DEBUG: disable warm start
 
         return np.array(values)
 
@@ -373,7 +373,7 @@ class WarmStartSolver:
             best_safety_value = float("-inf")
 
             # Perform grid search
-            for ang_vel in [0]: #angular_vel_grid:
+            for ang_vel in angular_vel_grid:
                 for lin_acc in linear_acc_grid:
                     # Current control input
                     u = np.array([ang_vel, lin_acc])

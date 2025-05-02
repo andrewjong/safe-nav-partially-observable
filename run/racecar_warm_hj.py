@@ -32,20 +32,20 @@ from src.dualguard_mppi import DualGuardNavigator
 MAP_RESOLUTION = 0.25  # units per cell
 N_SENSORS = 128
 MAX_SENSOR_DISTANCE = 10.0
-# MAX_SENSOR_DISTANCE = 5.0
+MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # FOV = np.pi / 3  # 45-degree view centered at the front of the agent
 # FOV = np.pi * 2
 
-MARK_FREE_RADIUS = 3.0
+MARK_FREE_RADIUS = 2.0
 
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
 THETA_MIN = 0
 THETA_MAX = 2 * np.pi# add an epsilon to avoid numerical issues
 THETA_NUM_CELLS = 13
-VELOCITY_MIN = -1.414 # Minimum velocity
+VELOCITY_MIN = -np.sqrt(.1**2 + .1**2) # Minimum velocity
 VELOCITY_MAX = 1.414 # add an epsilon to avoid numerical issues
 VELOCITY_NUM_CELLS = 21
 
@@ -600,7 +600,6 @@ class MapVisualizer:
         state_ind = solver.state_to_grid(state)
         angle_index = state_ind[2]
         velocity_index = state_ind[3]
-        # velocity_index = -1
         print(f"{state_ind=}")
         value_slice = np.array(values[:, :, angle_index, velocity_index])
         current_state_value = values[*state_ind]
@@ -834,6 +833,7 @@ def main():
         fov=FOV,
         render_mode="human",
     )
+
 
     # Get map dimensions from environment
     map_width = env.model.state_space[0][0].high[0]
