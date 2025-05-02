@@ -24,7 +24,6 @@ import posggym
 from utils import calculate_linear_velocity
 from matplotlib.animation import FFMpegWriter, PillowWriter
 
-from skimage.morphology import dilation, disk
 # Local imports
 from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfig
 from src.mppi import Navigator
