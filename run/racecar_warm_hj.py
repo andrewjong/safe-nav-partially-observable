@@ -34,6 +34,8 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 FOV = np.pi / 3  # 45-degree view centered at the front of the agent
 FOV = np.pi
 
+MARK_FREE_RADIUS = 5.0
+
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
 THETA_MIN = -np.pi
@@ -835,7 +837,7 @@ def main():
     )
     
     # Mark initial free space around the robot
-    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 1.0)
+    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, MARK_FREE_RADIUS)
 
     # Initialize Navigator with the agent radius from the environment
     nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
@@ -943,7 +945,7 @@ def main():
             )
             
             # Mark initial free space
-            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 2.0)
+            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, MARK_FREE_RADIUS)
             
             # Reinitialize solver
             solver = WarmStartSolver(config=config)
