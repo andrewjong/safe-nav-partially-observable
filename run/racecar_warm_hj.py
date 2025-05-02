@@ -400,6 +400,9 @@ class MapVisualizer:
     def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None, robot_goal=None):
         """
         Visualize the MPPI sampled trajectories and the chosen trajectory in continuous space.
+        
+        This function will plot trajectories on both the occupancy map and the HJ level set plot
+        if the HJ level set plot exists.
 
         Args:
             trajectories (torch.Tensor): Tensor of shape (M*K, T, nx) containing sampled trajectories
@@ -565,6 +568,73 @@ class MapVisualizer:
         if self.mppi_fig.canvas is not None:
             self.mppi_fig.canvas.draw_idle()
             plt.pause(0.001)
+            
+        # If HJ level set visualization exists, also plot trajectories there
+        if self.hj_fig is not None and hasattr(self.hj_fig, 'hj_visualization'):
+            # Switch to the HJ figure
+            plt.figure(self.hj_fig.number)
+            ax = self.hj_fig.axes[0] if len(self.hj_fig.axes) > 0 else None
+            
+            if ax is not None:
+                # Store existing lines to remove later
+                hj_mppi_lines = getattr(ax, 'hj_mppi_lines', [])
+                hj_chosen_line = getattr(ax, 'hj_chosen_line', None)
+                
+                # Remove previous trajectory lines
+                for line in hj_mppi_lines:
+                    if line in ax.lines:
+                        line.remove()
+                
+                if hj_chosen_line is not None and hj_chosen_line in ax.lines:
+                    hj_chosen_line.remove()
+                
+                # Initialize new lists
+                hj_mppi_lines = []
+                hj_chosen_line = None
+                
+                # Plot trajectories on HJ level set
+                if trajectories is not None:
+                    trajectories_np = trajectories.detach().cpu().numpy()
+                    num_trajectories = trajectories_np.shape[0]
+                    
+                    # Plot a subset of trajectories to avoid cluttering
+                    max_trajectories_to_plot = min(50, num_trajectories)
+                    step = max(1, num_trajectories // max_trajectories_to_plot)
+                    
+                    for i in range(0, num_trajectories, step):
+                        traj = trajectories_np[i]
+                        # Extract x and y coordinates
+                        traj_x = traj[:, 0]
+                        traj_y = traj[:, 1]
+                        
+                        # Plot the trajectory with low alpha
+                        line = ax.plot(traj_x, traj_y, "b-", alpha=0.1, linewidth=1)[0]
+                        hj_mppi_lines.append(line)
+                
+                # Plot the chosen trajectory with a different color and higher alpha
+                if chosen_trajectory is not None:
+                    chosen_traj_np = chosen_trajectory.detach().cpu().numpy()
+                    chosen_x = chosen_traj_np[:, 0]
+                    chosen_y = chosen_traj_np[:, 1]
+                    
+                    hj_chosen_line = ax.plot(
+                        chosen_x, chosen_y, "g-", alpha=0.8, linewidth=2, label="Chosen Trajectory"
+                    )[0]
+                
+                # Store the lines as attributes of the axis for later removal
+                ax.hj_mppi_lines = hj_mppi_lines
+                ax.hj_chosen_line = hj_chosen_line
+                
+                # Update the legend
+                ax.legend(loc="upper right")
+                
+                # Redraw the HJ figure
+                self.hj_fig.canvas.draw_idle()
+                plt.pause(0.001)
+            
+            # Switch back to the MPPI figure if it exists
+            if self.mppi_fig is not None:
+                plt.figure(self.mppi_fig.number)
 
     def visualize_hj_level_set(
         self,
@@ -595,9 +665,27 @@ class MapVisualizer:
             self.hj_fig.hj_visualization = True
         else:
             plt.figure(self.hj_fig.number)
+            
+            # Store any existing MPPI trajectory lines before clearing
+            ax = self.hj_fig.axes[0] if len(self.hj_fig.axes) > 0 else None
+            hj_mppi_lines = []
+            hj_chosen_line = None
+            
+            if ax is not None:
+                # Save existing trajectory lines if they exist
+                if hasattr(ax, 'hj_mppi_lines'):
+                    hj_mppi_lines = ax.hj_mppi_lines
+                if hasattr(ax, 'hj_chosen_line'):
+                    hj_chosen_line = ax.hj_chosen_line
+            
+            # Clear the figure
             plt.clf()
-
+            
         ax = self.hj_fig.add_subplot(111)
+        
+        # Initialize empty lists for trajectory lines if they don't exist yet
+        ax.hj_mppi_lines = []
+        ax.hj_chosen_line = None
 
         # Get the current slice of the value function at the current vehicle angle
         state = np.array([vehicle_x, vehicle_y, vehicle_angle, vehicle_velocity])
