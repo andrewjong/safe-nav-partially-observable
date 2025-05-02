@@ -347,17 +347,13 @@ class WarmStartSolver:
     def compute_safe_control(
         self, state, nominal_action, action_bounds, values=None, values_grad=None
     ):
-        """Given a state and nominal action, computes the safe control action
-
+        """
         Args:
             state (np.ndarray): [x, y, theta, v] state of the system
             nominal_action (np.ndarray): [angular_velocity, linear_acceleration] action
             action_bounds (np.ndarray): [[min_angular_velocity, max_angular_velocity], [min_linear_acceleration, max_linear_acceleration]]
             values (np.ndarray, optional): values from the level set, where > 0 is safe and < 0 is unsafe. Defaults to None.
             values_grad (np.ndarray, optional): gradient of the values. Defaults to None.
-
-        Returns:
-            _type_: _description_
         """
         if values is None:
             values = self.last_values
@@ -381,7 +377,7 @@ class WarmStartSolver:
 
         has_intervened = not is_safe
 
-        # OPENHANDS TODO
+        # TODO OPENHANDS
 
         return action, value, initial_value, has_intervened
 
