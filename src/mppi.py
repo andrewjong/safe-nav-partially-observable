@@ -6,57 +6,9 @@ import numpy as np
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal
 from matplotlib import pyplot as plt
+from utils import dubins_dynamics_tensor
 
 logger = logging.getLogger(__name__)
-
-
-def dubins_dynamics_tensor(
-    current_state: torch.Tensor, action: torch.Tensor, dt: float
-) -> torch.Tensor:
-    """
-    current_state: shape(num_samples, dim_x)
-    action: shape(num_samples, dim_u)
-    
-    action[:, 0] is angular velocity
-    action[:, 1] is linear acceleration
-    Implemented discrete time dynamics with RK-4.
-    return:
-    next_state: shape(num_samples, dim_x)
-    """
-    def one_step_dynamics(state, action):
-        """Compute the derivatives [dx/dt, dy/dt, dtheta/dt, dv/dt]."""
-        # Extract state variables
-        x, y, theta, v = state[:, 0], state[:, 1], state[:, 2], state[:, 3]
-        angular_vel = action[:, 0]
-        linear_acc = action[:, 1]
-        
-        # Compute derivatives
-        dx_dt = v * torch.cos(theta)
-        dy_dt = v * torch.sin(theta)
-        dtheta_dt = angular_vel
-        dv_dt = linear_acc
-        
-        # Stack derivatives into a tensor with the same shape as state
-        derivatives = torch.stack([dx_dt, dy_dt, dtheta_dt, dv_dt], dim=1)
-        return derivatives
-    
-    # k1
-    k1 = one_step_dynamics(current_state, action)
-    # k2
-    mid_state_k2 = current_state + 0.5 * dt * k1
-    k2 = one_step_dynamics(mid_state_k2, action)
-    # k3
-    mid_state_k3 = current_state + 0.5 * dt * k2
-    k3 = one_step_dynamics(mid_state_k3, action)
-    # k4
-    end_state_k4 = current_state + dt * k3
-    k4 = one_step_dynamics(end_state_k4, action)
-    # Combine k1, k2, k3, k4 to compute the next state
-    next_state = current_state + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
-    
-    # Normalize theta to [0, 2π]
-    next_state[..., 2] = next_state[..., 2] % (2 * torch.pi)
-    return next_state
 
 def _ensure_non_zero(cost, beta, factor):
     return torch.exp(-factor * (cost - beta))
@@ -556,7 +508,7 @@ class Navigator:
         mppi_config["nx"] = 4  # [x, y, theta, v]
         mppi_config["dt"] = self.dt
         # Adjust noise sigma to have different values for angular velocity and linear acceleration
-        mppi_config["noise_sigma"] = torch.diag(torch.tensor([np.pi / 4 / 100000, 0.25 / 4 / 10000000], dtype=self.dtype, device=self.device))
+        mppi_config["noise_sigma"] = torch.diag(torch.tensor([np.pi / 4 / 100000, 0.25 / 4 / 1], dtype=self.dtype, device=self.device))
         mppi_config["num_samples"] = 300  # Increase samples for better exploration
         mppi_config["horizon"] = 75  # Increase horizon for better planning
         mppi_config["device"] = self.device

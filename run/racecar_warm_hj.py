@@ -27,23 +27,24 @@ from src.mppi import Navigator
 
 # Environment setup
 MAP_RESOLUTION = 0.25  # units per cell
-N_SENSORS = 32
-MAX_SENSOR_DISTANCE = 10.0
+N_SENSORS = 128
+MAX_SENSOR_DISTANCE = 50.0
+MAX_SENSOR_DISTANCE = 5.0
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 FOV = np.pi / 3  # 45-degree view centered at the front of the agent
-FOV = np.pi
+FOV = np.pi * 2
 
-MARK_FREE_RADIUS = 5.0
+MARK_FREE_RADIUS = 3.0
 
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
-THETA_MIN = -np.pi
-THETA_MAX = np.pi
-THETA_NUM_CELLS = 3
-VELOCITY_MIN = -1.0
-VELOCITY_MAX = 1.0
-VELOCITY_NUM_CELLS = 20
+THETA_MIN = 0
+THETA_MAX = 2 * np.pi + 1.0  # add an epsilon to avoid numerical issues
+THETA_NUM_CELLS = 13
+VELOCITY_MIN = -1.41 # Minimum velocity
+VELOCITY_MAX = 1.41 + 0.1  # add an epsilon to avoid numerical issues
+VELOCITY_NUM_CELLS = 21
 
 # Cell state constants
 UNSEEN = 0
@@ -591,10 +592,13 @@ class MapVisualizer:
 
         # Get the current slice of the value function at the current vehicle angle
         state = np.array([vehicle_x, vehicle_y, vehicle_angle, vehicle_velocity])
+        print(f"{state=}")
 
         state_ind = solver.state_to_grid(state)
         angle_index = state_ind[2]
         velocity_index = state_ind[3]
+        # velocity_index = -1
+        print(f"{state_ind=}")
         value_slice = np.array(values[:, :, angle_index, velocity_index])
         current_state_value = values[*state_ind]
         print(f"Current state value: {current_state_value}")
@@ -671,46 +675,46 @@ class MapVisualizer:
             print(f"Could not plot unsafe boundary: {e}")
 
         # Plot the fail set boundary by tracing cell boundaries
-        # try:
-        #     # Convert fail_set to numpy array if it's not already
-        #     fail_set_np = np.array(fail_set)
+        try:
+            # Convert fail_set to numpy array if it's not already
+            fail_set_np = np.array(fail_set)
             
-        #     # Create a binary mask for fail cells
-        #     fail_mask = fail_set_np > 0.5
+            # Create a binary mask for fail cells
+            fail_mask = fail_set_np > 0.5
             
-        #     # Create a new array with NaN for non-fail cells and 1 for fail cells
-        #     fail_display = np.where(fail_mask, 1, np.nan)
+            # Create a new array with NaN for non-fail cells and 1 for fail cells
+            fail_display = np.where(fail_mask, 1, np.nan)
             
-        #     # Plot the fail cells with a black color and visible cell edges
-        #     fail_boundary = ax.pcolormesh(
-        #         X, Y, fail_display, 
-        #         cmap=plt.cm.colors.ListedColormap(['black']),
-        #         alpha=0.5,
-        #         edgecolors='none',
-        #         linewidths=1.5,
-        #         shading='auto'
-        #     )
+            # Plot the fail cells with a black color and visible cell edges
+            fail_boundary = ax.pcolormesh(
+                X, Y, fail_display, 
+                cmap=plt.cm.colors.ListedColormap(['black']),
+                alpha=0.5,
+                edgecolors='none',
+                linewidths=1.5,
+                shading='auto'
+            )
             
-        #     # Add a text annotation for the fail region
-        #     if np.any(fail_mask):
-        #         from scipy import ndimage
-        #         # Label connected regions
-        #         labeled_mask, num_features = ndimage.label(fail_mask)
-        #         if num_features > 0:
-        #             # Find the largest region
-        #             largest_region = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1
-        #             # Get coordinates of the largest region
-        #             y_indices, x_indices = np.where(labeled_mask == largest_region)
-        #             if len(y_indices) > 0:
-        #                 # Calculate center of the region
-        #                 center_y = int(np.mean(y_indices))
-        #                 center_x = int(np.mean(x_indices))
-        #                 # Add text annotation
-        #                 ax.text(X[center_y, center_x], Y[center_y, center_x], 
-        #                         "Fail", color='white', fontweight='bold',
-        #                         ha='center', va='center')
-        # except Exception as e:
-        #     print(f"Could not plot fail set boundary: {e}")
+            # Add a text annotation for the fail region
+            if np.any(fail_mask):
+                from scipy import ndimage
+                # Label connected regions
+                labeled_mask, num_features = ndimage.label(fail_mask)
+                if num_features > 0:
+                    # Find the largest region
+                    largest_region = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1
+                    # Get coordinates of the largest region
+                    y_indices, x_indices = np.where(labeled_mask == largest_region)
+                    if len(y_indices) > 0:
+                        # Calculate center of the region
+                        center_y = int(np.mean(y_indices))
+                        center_x = int(np.mean(x_indices))
+                        # Add text annotation
+                        ax.text(X[center_y, center_x], Y[center_y, center_x], 
+                                "Fail", color='white', fontweight='bold',
+                                ha='center', va='center')
+        except Exception as e:
+            print(f"Could not plot fail set boundary: {e}")
 
         # Plot the vehicle position with color based on safety intervention
         robot_color = "cyan" if safety_intervening else "red"
@@ -787,7 +791,8 @@ def main():
         "DrivingContinuous-v0",
         # world="30x30OneWallDiagonal",
         # world="30x30EmptyStraight",
-        world="14x14Empty",
+        # world="14x14Empty",
+        world="14x14OneWall",
         # world="30x30Empty",
         # world="30x30ScatteredObstacleField",
         # world="14x14Sparse",

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import skfmm
 import cvxpy as cp
 
@@ -9,6 +10,7 @@ from hj_reachability import dynamics, sets
 from matplotlib import pyplot as plt
 from dataclasses import dataclass
 from time import time as time_pkg
+from utils import dubins_dynamics_tensor
 
 import matplotlib.pyplot as plt
 
@@ -52,11 +54,13 @@ class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
         )
 
     def open_loop_dynamics(self, state, time):
-        x, y, psi, v = state  # State now includes velocity v
-        return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.0, 0.0])
+        x, y, theta, v = state  # State now includes velocity v
+        # return jnp.array([v * jnp.cos(theta), v * jnp.sin(theta), 0.0, 0.0])
+        # turns out in posggym, these x and y are transposed
+        return jnp.array([v * jnp.sin(theta), v * jnp.cos(theta), 0.0, 0.0])
 
     def control_jacobian(self, state, time):
-        x, y, psi, v = state  # Updated to unpack 4 state variables
+        x, y, theta, v = state  # Updated to unpack 4 state variables
         return jnp.array(
             [
                 [0, 0],
@@ -163,7 +167,7 @@ class WarmStartSolver:
         :return: system-dim-D numpy array of initial values. e.g. for dubins3d, this is a 3D array
         """
         if self.config.system_name == "dubins3d_velocity":
-            initial_values = grid_map
+            initial_values = grid_map  - 0.5
             initial_values = skfmm.distance(initial_values, dx=dx)
             initial_values = np.tile(
                 initial_values[:, :, np.newaxis, np.newaxis],
@@ -264,6 +268,7 @@ class WarmStartSolver:
         )
 
         self.last_values = values
+        self.last_values = None
 
         return np.array(values)
 
@@ -308,7 +313,10 @@ class WarmStartSolver:
             )
 
         state = np.array(state)
-        is_safe, value, initial_value = self.check_if_safe(state, values)
+        next_state = dubins_dynamics_tensor(
+            torch.tensor(state[np.newaxis, :]), action=torch.tensor(nominal_action[np.newaxis, :]), dt=1.0
+        )[0].numpy()
+        is_safe, value, initial_value = self.check_if_safe(next_state, values)
 
         action = nominal_action.copy()
         has_intervened = not is_safe
@@ -359,7 +367,7 @@ class WarmStartSolver:
             min_distance = float("inf")
 
             # Perform grid search
-            for ang_vel in angular_vel_grid:
+            for ang_vel in [0]: #angular_vel_grid:
                 for lin_acc in linear_acc_grid:
                     # Current control input
                     u = np.array([ang_vel, lin_acc])
@@ -405,7 +413,7 @@ class WarmStartSolver:
 
     def state_to_grid(self, state):
         grid = self.problem_definition["grid"]
-        state_ind = np.array(grid.nearest_index(state)) - 1
+        state_ind = np.array(grid.nearest_index(state))
         return state_ind
 
     def plot_zero_level(
