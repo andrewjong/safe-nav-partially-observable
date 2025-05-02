@@ -614,16 +614,23 @@ class MapVisualizer:
             X, Y, self.occupancy_map.grid, cmap=occupancy_cmap, norm=occupancy_norm, alpha=0.3
         )
 
-        # Plot the value function as a heat map
+        # Plot the value function as a discrete heat map
         # Clip the values to a reasonable range for better visualization
         min_val, max_val = np.min(value_slice), np.max(value_slice)
         value_range = max_val - min_val
         vmin, vmax = min_val - 0.1 * value_range, max_val + 0.1 * value_range
         
-        value_contour = ax.contourf(
-            X, Y, value_slice, levels=20, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax
+        # Comment out the contourf visualization
+        # value_contour = ax.contourf(
+        #     X, Y, value_slice, levels=20, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax
+        # )
+        
+        # Instead, use pcolormesh for a discrete cell-by-cell visualization
+        value_heatmap = ax.pcolormesh(
+            X, Y, value_slice, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax, 
+            edgecolors='face', shading='auto'
         )
-        cbar = plt.colorbar(value_contour, ax=ax, label="Value Function")
+        cbar = plt.colorbar(value_heatmap, ax=ax, label="Value Function")
 
         # Plot the zero level set (boundary of unsafe set)
         try:
