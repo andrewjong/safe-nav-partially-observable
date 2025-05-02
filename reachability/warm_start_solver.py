@@ -9,76 +9,23 @@ from hj_reachability import dynamics, sets
 from matplotlib import pyplot as plt
 from dataclasses import dataclass
 from time import time as time_pkg
-from scipy.ndimage import distance_transform_edt
 
-from learning.base_model import BaseModel
-from learning.gaussian_process import GaussianProcess
-from itertools import product
 import matplotlib.pyplot as plt
-from simulator.static_smoke import StaticSmoke, SmokeBlobParams
-from src.failure_map_builder import GPFailureMapBuilder, FailureMapParams
 
 
 @dataclass
 class WarmStartSolverConfig:
     system_name: str  # "dubins3d"
-    domain_cells: (
-        np.ndarray
-    )  # 1-dim: e.g [x_resolution, y_resolution, theta_resolution]
-    domain: (
-        np.ndarray
-    )  # 2-dim: e.g [[x_min, y_min, theta_min], [x_max, y_max, theta_max]]
+    # 1-dim: e.g [x_resolution, y_resolution, theta_resolution, v_resolution]
+    domain_cells: np.ndarray
+    # 2-dim: e.g [[x_min, y_min, theta_min, v_min], [x_max, y_max, theta_max, v_max]]
+    domain: np.ndarray
     mode: str  # "brs" or "brt"
     accuracy: str  # "low", "medium", "high", "very_high"
     superlevel_set_epsilon: float = 0.1
     converged_values: np.ndarray | None = None
     until_convergent: bool = True
     print_progress: bool = True
-
-
-# class Dubins3D(dynamics.ControlAndDisturbanceAffineDynamics):
-#     def __init__(
-#         self,
-#         max_turn_rate=1.0,
-#         control_mode="max",
-#         disturbance_mode="min",
-#         control_space=None,
-#         disturbance_space=None,
-#     ):
-#         self.speed = 2.0
-#         if control_space is None:
-#             control_space = sets.Box(
-#                 jnp.array([-max_turn_rate]), jnp.array([max_turn_rate])
-#             )
-#         if disturbance_space is None:
-#             disturbance_space = sets.Box(jnp.array([0, 0]), jnp.array([0, 0]))
-#         super().__init__(
-#             control_mode, disturbance_mode, control_space, disturbance_space
-#         )
-
-#     def open_loop_dynamics(self, state, time):
-#         _, _, psi = state
-#         v = self.speed
-#         return jnp.array([v * jnp.cos(psi), v * jnp.sin(psi), 0.0])
-
-#     def control_jacobian(self, state, time):
-#         x, y, _ = state
-#         return jnp.array(
-#             [
-#                 [0],
-#                 [0],
-#                 [1],
-#             ]
-#         )
-
-#     def disturbance_jacobian(self, state, time):
-#         return jnp.array(
-#             [
-#                 [1.0, 0.0],
-#                 [0.0, 1.0],
-#                 [0.0, 0.0],
-#             ]
-#         )
 
 
 class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
@@ -93,7 +40,6 @@ class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
         control_space=None,
         disturbance_space=None,
     ):
-        # Note: Removed self.speed as velocity is now part of the state
         if control_space is None:
             control_space = sets.Box(
                 jnp.array([min_angular_velocity, min_linear_acceleration]),
