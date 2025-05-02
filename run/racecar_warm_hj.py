@@ -855,8 +855,8 @@ def main():
     config = WarmStartSolverConfig(
         system_name="dubins3d_velocity",
         domain_cells=[
-            int(map_width / MAP_RESOLUTION),
-            int(map_height / MAP_RESOLUTION),
+            int(map_width / MAP_RESOLUTION),  # grid_width
+            int(map_height / MAP_RESOLUTION), # grid_height
             THETA_NUM_CELLS,
             VELOCITY_NUM_CELLS
         ],
@@ -932,7 +932,7 @@ def main():
         nom_controller.set_goal(robot_goal)
         nom_controller.set_map(
             occupancy_map.grid != FREE,  # Obstacle map (not free = obstacle)
-            [occupancy_map.grid_width, occupancy_map.grid_height],  # Grid dimensions (width, height)
+            [occupancy_map.grid_width, occupancy_map.grid_height],  # Grid dimensions (width, height) - matches warm start solver convention
             scaled_origin,  # Origin
             MAP_RESOLUTION,  # Resolution
         )
