@@ -491,69 +491,118 @@ class Navigator:
             # Return zero information gain if not enabled or no map available
             return torch.zeros(states.shape[0], device=self.device, dtype=self.dtype)
         
+        # Get map dimensions
+        map_height, map_width = self._map_torch.shape
+        
         # Extract positions and orientations
         positions = states[:, :2]  # x, y positions
         thetas = states[:, 2]      # orientations
         
+        # Convert world coordinates to grid indices
+        grid_x = torch.floor((positions[:, 0] - self._map_origin_torch[0]) / self._cell_size).long()
+        grid_y = torch.floor((positions[:, 1] - self._map_origin_torch[1]) / self._cell_size).long()
+        
+        # Create mask for valid positions (inside map bounds)
+        valid_mask = (grid_x >= 0) & (grid_x < map_width) & (grid_y >= 0) & (grid_y < map_height)
+        
         # Initialize information gain scores
         info_gain = torch.zeros(states.shape[0], device=self.device, dtype=self.dtype)
         
-        # Get map dimensions
-        map_height, map_width = self._map_torch.shape
+        # Skip computation if no valid positions
+        if not torch.any(valid_mask):
+            return info_gain
         
-        # For each state, cast rays and count unseen cells
-        for i in range(states.shape[0]):
-            x, y = positions[i]
-            theta = thetas[i]
+        # Number of rays to cast (reduced for efficiency)
+        num_rays = 16
+        half_fov = self.fov_angle / 2
+        
+        # Precompute ray directions for efficiency
+        # Create a tensor of ray angles for all samples at once
+        ray_angles_base = torch.linspace(-half_fov, half_fov, num_rays, device=self.device)
+        
+        # Convert sensor range to grid units
+        max_dist = self.sensor_range / self._cell_size
+        step_size = 0.5  # Step size in grid units
+        
+        # Precompute steps for ray casting
+        steps = torch.arange(0, max_dist, step_size, device=self.device)
+        
+        # Maximum possible unseen cells per sample
+        max_possible_unseen = num_rays * (max_dist / step_size)
+        
+        # Process only valid positions
+        valid_indices = torch.where(valid_mask)[0]
+        
+        # Batch size for processing (to avoid memory issues)
+        batch_size = 32
+        for batch_start in range(0, len(valid_indices), batch_size):
+            batch_end = min(batch_start + batch_size, len(valid_indices))
+            batch_indices = valid_indices[batch_start:batch_end]
             
-            # Convert world coordinates to grid indices
-            grid_x = torch.floor((x - self._map_origin_torch[0]) / self._cell_size).long()
-            grid_y = torch.floor((y - self._map_origin_torch[1]) / self._cell_size).long()
+            # Get batch data
+            batch_grid_x = grid_x[batch_indices]
+            batch_grid_y = grid_y[batch_indices]
+            batch_thetas = thetas[batch_indices]
             
-            # Skip if position is outside the map
-            if (grid_x < 0 or grid_x >= map_width or grid_y < 0 or grid_y >= map_height):
-                continue
-                
-            # Calculate angles for rays within the FOV
-            num_rays = 16  # Number of rays to cast (reduced for efficiency)
-            half_fov = self.fov_angle / 2
-            ray_angles = torch.linspace(-half_fov, half_fov, num_rays, device=self.device) + theta
+            # Calculate ray angles for each sample in the batch
+            # Shape: [batch_size, num_rays]
+            batch_ray_angles = ray_angles_base.unsqueeze(0) + batch_thetas.unsqueeze(1)
             
-            # Count unseen cells along each ray
-            unseen_count = 0
-            for angle in ray_angles:
-                # Calculate ray direction
-                dx = torch.cos(angle)
-                dy = torch.sin(angle)
+            # Calculate ray directions for each angle
+            # Shape: [batch_size, num_rays]
+            ray_dx = torch.cos(batch_ray_angles)
+            ray_dy = torch.sin(batch_ray_angles)
+            
+            # Initialize unseen counts for the batch
+            batch_unseen_counts = torch.zeros(len(batch_indices), device=self.device)
+            
+            # For each ray direction
+            for ray_idx in range(num_rays):
+                # Get direction for this ray across all batch samples
+                dx = ray_dx[:, ray_idx]
+                dy = ray_dy[:, ray_idx]
                 
-                # Cast ray from current position
-                max_dist = self.sensor_range / self._cell_size  # Convert to grid units
-                step_size = 0.5  # Step size in grid units
+                # Initialize flags to track which rays are still active
+                active_rays = torch.ones(len(batch_indices), dtype=torch.bool, device=self.device)
                 
-                for step in torch.arange(0, max_dist, step_size, device=self.device):
-                    # Calculate current position along ray
-                    curr_x = grid_x + dx * step
-                    curr_y = grid_y + dy * step
+                # Cast rays step by step
+                for step in steps:
+                    # Only process active rays
+                    if not torch.any(active_rays):
+                        break
+                    
+                    # Calculate current positions along rays
+                    curr_x = batch_grid_x[active_rays] + dx[active_rays] * step
+                    curr_y = batch_grid_y[active_rays] + dy[active_rays] * step
                     
                     # Convert to integer indices
                     idx_x = torch.floor(curr_x).long()
                     idx_y = torch.floor(curr_y).long()
                     
                     # Check if within map bounds
-                    if (idx_x < 0 or idx_x >= map_width or idx_y < 0 or idx_y >= map_height):
-                        break
+                    in_bounds = (idx_x >= 0) & (idx_x < map_width) & (idx_y >= 0) & (idx_y < map_height)
                     
-                    # Check cell status (0 = unseen)
-                    if self._map_torch[idx_y, idx_x] == 0:
-                        unseen_count += 1
-                        
-                    # Stop ray if we hit an obstacle
-                    if self._map_torch[idx_y, idx_x] == 2:  # 2 = occupied
-                        break
+                    # Get map values for in-bounds positions
+                    map_values = torch.zeros_like(in_bounds, dtype=torch.int8)
+                    if torch.any(in_bounds):
+                        map_values[in_bounds] = self._map_torch[idx_y[in_bounds], idx_x[in_bounds]]
+                    
+                    # Count unseen cells (value 0)
+                    unseen_mask = in_bounds & (map_values == 0)
+                    if torch.any(unseen_mask):
+                        # Get original indices in the batch for unseen cells
+                        unseen_indices = torch.where(active_rays)[0][unseen_mask]
+                        batch_unseen_counts[unseen_indices] += 1
+                    
+                    # Update active rays: deactivate rays that hit obstacles or went out of bounds
+                    hit_obstacle = in_bounds & (map_values == 2)  # 2 = occupied
+                    active_rays_update = active_rays.clone()
+                    active_rays_update[torch.where(active_rays)[0][~in_bounds]] = False
+                    active_rays_update[torch.where(active_rays)[0][hit_obstacle]] = False
+                    active_rays = active_rays_update
             
             # Normalize by the maximum possible unseen cells
-            max_possible_unseen = num_rays * (max_dist / step_size)
-            info_gain[i] = unseen_count / max_possible_unseen
+            info_gain[batch_indices] = batch_unseen_counts / max_possible_unseen
         
         return info_gain
 
