@@ -14,12 +14,12 @@ from scipy import ndimage
 # Add the parent directory to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import the original file
-from run.racecar_warm_hj import RacecarWarmHJRunner
+# Import the original file's classes
+from run.racecar_warm_hj import MapVisualizer
 
-class RacecarWarmHJPlotlyRunner(RacecarWarmHJRunner):
+class PlotlyMapVisualizer(MapVisualizer):
     """
-    Modified version of RacecarWarmHJRunner that uses Plotly for interactive visualization.
+    Modified version of MapVisualizer that uses Plotly for interactive visualization.
     """
     
     def visualize_hj_level_set(
@@ -283,16 +283,184 @@ class RacecarWarmHJPlotlyRunner(RacecarWarmHJRunner):
         fig.show()
 
 
-# Main function to run the simulation
+# Modified main function to run the simulation with Plotly visualization
 def main():
     """
     Main function to run the simulation with Plotly visualization.
+    This replaces the original MapVisualizer with our PlotlyMapVisualizer.
     """
-    # Create the runner
-    runner = RacecarWarmHJPlotlyRunner()
+    # Import necessary components from the original file
+    from run.racecar_warm_hj import (
+        posggym, OccupancyMap, WarmStartSolver, WarmStartSolverConfig, Navigator,
+        N_SENSORS, MAX_SENSOR_DISTANCE, FOV, MAP_RESOLUTION, THETA_NUM_CELLS,
+        VELOCITY_NUM_CELLS, THETA_MIN, THETA_MAX, VELOCITY_MIN, VELOCITY_MAX,
+        ROBOT_ORIGIN, FREE
+    )
     
-    # Run the simulation
-    runner.run()
+    # Create the environment
+    global env, robot_goal
+    robot_goal = None
+    
+    env = posggym.make(
+        "DrivingContinuous-v0",
+        world="14x14Empty",
+        num_agents=1,
+        n_sensors=N_SENSORS,
+        obs_dist=MAX_SENSOR_DISTANCE,
+        fov=FOV,
+        render_mode="human",
+    )
+
+    # Get map dimensions from environment
+    map_width = env.model.state_space[0][0].high[0]
+    map_height = env.model.state_space[0][0].high[1]
+
+    # Initialize HJ reachability solver
+    config = WarmStartSolverConfig(
+        system_name="dubins3d_velocity",
+        domain_cells=[
+            int(map_width / MAP_RESOLUTION),
+            int(map_height / MAP_RESOLUTION),
+            THETA_NUM_CELLS,
+            VELOCITY_NUM_CELLS
+        ],
+        domain=np.array([
+            [0, 0, THETA_MIN, VELOCITY_MIN], 
+            [map_width, map_height, THETA_MAX, VELOCITY_MAX]
+        ]),
+        mode="brt",
+        accuracy="medium",
+        converged_values=None,
+        until_convergent=True,
+        print_progress=False,
+    )
+    solver = WarmStartSolver(config=config)
+
+    # Initialize occupancy map and visualizer
+    occupancy_map = OccupancyMap(map_width, map_height, MAP_RESOLUTION)
+    
+    # Use our Plotly visualizer instead of the original
+    visualizer = PlotlyMapVisualizer(occupancy_map)
+
+    # Reset environment and get initial observations
+    observations, infos = env.reset()
+    lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
+        observations["0"][0:N_SENSORS],
+        observations["0"][2 * N_SENSORS],
+        observations["0"][2 * N_SENSORS + 1],
+        observations["0"][2 * N_SENSORS + 2],
+    )
+    
+    # Mark initial free space around the robot
+    occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 1.0)
+
+    # Initialize Navigator with the agent radius from the environment
+    nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
+    
+    # Main simulation loop
+    for _ in range(3000):
+        # Get current observation
+        observation = observations["0"]
+        lidar_distances = observation[0:N_SENSORS]
+        vehicle_x = observation[2 * N_SENSORS]
+        vehicle_y = observation[2 * N_SENSORS + 1]
+        vehicle_angle = observation[2 * N_SENSORS + 2]
+        vehicle_x_velocity = observation[2 * N_SENSORS + 3]
+        vehicle_y_velocity = observation[2 * N_SENSORS + 4]
+        
+        # Calculate current velocity magnitude
+        current_vel = np.linalg.norm(np.array([vehicle_x_velocity, vehicle_y_velocity]))
+        
+        # Render environment
+        env.render()
+
+        # Update occupancy map from lidar observations
+        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
+
+        # Get initial safe set (free cells)
+        initial_safe_set = occupancy_map.grid == FREE
+
+        # Set up MPPI controller
+        scaled_origin = [ROBOT_ORIGIN[0] / MAP_RESOLUTION, ROBOT_ORIGIN[1] / MAP_RESOLUTION]
+        robot_goal = env.state[0].dest_coord
+        
+        # Configure MPPI controller
+        nom_controller.set_goal(robot_goal)
+        nom_controller.set_map(
+            occupancy_map.grid != FREE,  # Obstacle map (not free = obstacle)
+            [occupancy_map.grid_height, occupancy_map.grid_width],  # Grid dimensions
+            scaled_origin,  # Origin
+            MAP_RESOLUTION,  # Resolution
+        )
+        nom_controller.set_state((vehicle_x, vehicle_y), vehicle_angle, current_vel)
+        
+        # Get nominal action from MPPI
+        mppi_action = nom_controller.get_command().cpu().numpy()
+
+        # Get and visualize MPPI trajectories
+        sampled_trajectories = nom_controller.get_sampled_trajectories()
+        chosen_trajectory = nom_controller.get_chosen_trajectory()
+
+        # Visualize MPPI trajectories
+        visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal)
+
+        # Compute HJ reachability
+        values = solver.solve(
+            initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
+        )
+
+        # Compute safe action if values are available
+        if values is not None:
+            # Compute safe action
+            safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
+                np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
+                mppi_action,
+                action_bounds=np.array([[-np.pi/4 * 0, np.pi/4 * 0], [-0.25, 0.25]]),
+                values=values,
+            )
+
+            # Visualize HJ level set
+            fail_set = np.logical_not(initial_safe_set)
+            visualizer.visualize_hj_level_set(
+                solver,
+                values,
+                fail_set,
+                vehicle_x,
+                vehicle_y,
+                vehicle_angle,
+                current_vel,
+                safety_intervening=has_intervened,
+            )
+        else:
+            safe_mppi_action = mppi_action
+            has_intervened = False
+
+        # Take a step in the environment
+        observations, rewards, terminations, truncations, all_done, infos = env.step(
+            {"0": safe_mppi_action}
+        )
+        
+        # Check for collision
+        reward = rewards["0"]
+        if reward < 0:
+            print("AGENT COLLIDED.")
+            
+        # Reset if episode is done
+        if all_done:
+            observations, infos = env.reset()
+            occupancy_map.reset()
+            visualizer.reset()
+            
+            # Get initial observations after reset
+            lidar_distances, vehicle_x, vehicle_y, vehicle_angle = (
+                observations["0"][0:N_SENSORS],
+                observations["0"][2 * N_SENSORS],
+                observations["0"][2 * N_SENSORS + 1],
+                observations["0"][2 * N_SENSORS + 2],
+            )
+            
+            # Mark initial free space
+            occupancy_map.mark_free_radius(vehicle_x, vehicle_y, 2.0)
 
 
 if __name__ == "__main__":
