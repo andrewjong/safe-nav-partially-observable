@@ -237,14 +237,14 @@ class DualGuardNavigator(Navigator):
     """
     
     def __init__(self, hj_solver=None, safety_threshold=0.0, gradient_scale=1.0, **kwargs):
-        # Set planner_type to "dualguard_mppi"
-        kwargs["planner_type"] = "dualguard_mppi"
-        super().__init__(**kwargs)
-        
-        # Store HJ solver and parameters
+        # Store HJ solver and parameters before calling super().__init__
         self.hj_solver = hj_solver
         self.safety_threshold = safety_threshold
         self.gradient_scale = gradient_scale
+        
+        # Set planner_type to "dualguard_mppi"
+        kwargs["planner_type"] = "dualguard_mppi"
+        super().__init__(**kwargs)
         
     def set_hj_solver(self, hj_solver):
         """Set the HJ reachability solver."""
