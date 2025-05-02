@@ -997,19 +997,6 @@ SUPPORTED_WORLDS: Dict[str, Dict[str, Any]] = {
         "supported_num_agents": 6,
         "max_episode_steps": 50,
     },
-    "7x7RoundAbout": {
-        "world_str": (
-            "#-...-#\n"
-            "-##.##+\n"
-            ".#...#.\n"
-            "...#...\n"
-            ".#...#.\n"
-            "-##.##+\n"
-            "#+...+#\n"
-        ),
-        "supported_num_agents": 4,
-        "max_episode_steps": 50,
-    },
     "14x14Empty": {
         "world_str": (
             "..............\n"
@@ -1050,26 +1037,6 @@ SUPPORTED_WORLDS: Dict[str, Dict[str, Any]] = {
         "supported_num_agents": 1,
         "max_episode_steps": 50,
     },
-    "14x14Blocks": {
-        "world_str": (
-            "#-..........-#\n"
-            "-###.####.###+\n"
-            ".###.####.###.\n"
-            ".###.####.###.\n"
-            "..............\n"
-            ".###.####.###.\n"
-            ".###.####.###.\n"
-            ".###.####.###.\n"
-            ".###.####.###.\n"
-            "..............\n"
-            ".###.####.###.\n"
-            ".###.####.###.\n"
-            "-###.####.###+\n"
-            "#+..........+#\n"
-        ),
-        "supported_num_agents": 4,
-        "max_episode_steps": 50,
-    },
     "14x14Sparse": {
         "world_str": (
             ".............#\n"
@@ -1084,7 +1051,7 @@ SUPPORTED_WORLDS: Dict[str, Dict[str, Any]] = {
             "..............\n"
             "..............\n"
             ".........#....\n"
-            "...#....-.....\n"
+            "...#.......-..\n"
             "#.............\n"
         ),
         "supported_num_agents": 1,
