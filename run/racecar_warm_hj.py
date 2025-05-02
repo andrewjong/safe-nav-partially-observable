@@ -10,6 +10,7 @@ and HJ reachability for safety guarantees.
 # Standard library imports
 import math
 import time
+import argparse
 
 # Third-party imports
 import numpy as np
@@ -21,6 +22,7 @@ from skimage.morphology import dilation, disk
 # Local imports
 from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfig
 from src.mppi import Navigator
+from src.dualguard_mppi import DualGuardNavigator
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -782,21 +784,50 @@ class MapVisualizer:
 # Main function
 # -----------------------------------------------------------------------------
 
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Racecar Hamilton-Jacobi Reachability with Warm Start")
+    parser.add_argument(
+        "--planner", 
+        type=str, 
+        choices=["mppi", "dualguard_mppi"], 
+        default="mppi",
+        help="Type of planner to use: 'mppi' (vanilla MPPI) or 'dualguard_mppi' (DualGuard MPPI)"
+    )
+    parser.add_argument(
+        "--world", 
+        type=str, 
+        choices=["14x14OneWall", "14x14Empty", "30x30OneWallDiagonal", "30x30EmptyStraight", 
+                 "30x30Empty", "30x30ScatteredObstacleField", "14x14Sparse"], 
+        default="14x14OneWall",
+        help="World environment to use"
+    )
+    parser.add_argument(
+        "--gradient_scale", 
+        type=float, 
+        default=1.0,
+        help="Scale factor for gradient-based corrections in DualGuard MPPI"
+    )
+    parser.add_argument(
+        "--safety_threshold", 
+        type=float, 
+        default=0.0,
+        help="Value above which states are considered safe in DualGuard MPPI"
+    )
+    return parser.parse_args()
+
 def main():
     """Main function to run the simulation."""
+    # Parse command-line arguments
+    args = parse_args()
+    
     # Create the environment
     global env, robot_goal
     robot_goal = None
     
     env = posggym.make(
         "DrivingContinuous-v0",
-        # world="30x30OneWallDiagonal",
-        # world="30x30EmptyStraight",
-        # world="14x14Empty",
-        world="14x14OneWall",
-        # world="30x30Empty",
-        # world="30x30ScatteredObstacleField",
-        # world="14x14Sparse",
+        world=args.world,
         num_agents=1,
         n_sensors=N_SENSORS,
         obs_dist=MAX_SENSOR_DISTANCE,
@@ -845,8 +876,18 @@ def main():
     # Mark initial free space around the robot
     occupancy_map.mark_free_radius(vehicle_x, vehicle_y, MARK_FREE_RADIUS)
 
-    # Initialize Navigator with the agent radius from the environment
-    nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
+    # Initialize the appropriate controller based on the planner type
+    if args.planner == "mppi":
+        print("Using vanilla MPPI planner")
+        nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
+    else:  # dualguard_mppi
+        print("Using DualGuard MPPI planner")
+        nom_controller = DualGuardNavigator(
+            hj_solver=solver,
+            safety_threshold=args.safety_threshold,
+            gradient_scale=args.gradient_scale,
+            robot_radius=env.model.world.agent_radius
+        )
     
     # Main simulation loop
     for _ in range(3000):
@@ -900,17 +941,30 @@ def main():
             initial_safe_set, MAP_RESOLUTION, target_time=-10.0, dt=0.1, epsilon=0.0001
         )
 
-        # Compute safe action if values are available
-        if values is not None:
+        # If using DualGuard MPPI, set the HJ values
+        if args.planner == "dualguard_mppi" and values is not None:
+            # Compute gradients for DualGuard MPPI
+            values_grad = np.gradient(values)
+            # Set the HJ values and gradients in the DualGuard MPPI planner
+            nom_controller.set_hj_values(values, values_grad)
+            # Get the action from DualGuard MPPI (which already incorporates safety)
+            safe_mppi_action = mppi_action
+            has_intervened = False  # DualGuard handles safety internally
+        # If using vanilla MPPI with HJ safety filter
+        elif args.planner == "mppi" and values is not None:
             # Compute safe action
             safe_mppi_action, _, _, has_intervened = solver.compute_safe_control(
                 np.array([vehicle_x, vehicle_y, vehicle_angle, current_vel]),
                 mppi_action,
-                action_bounds=np.array([[-np.pi/4 * 0, np.pi/4 * 0], [-0.25, 0.25]]),
+                action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
                 values=values,
             )
-
-            # Visualize HJ level set
+        else:
+            safe_mppi_action = mppi_action
+            has_intervened = False
+            
+        # Visualize HJ level set if values are available
+        if values is not None:
             fail_set = np.logical_not(initial_safe_set)
             visualizer.visualize_hj_level_set(
                 solver,
@@ -922,9 +976,6 @@ def main():
                 current_vel,
                 safety_intervening=has_intervened,
             )
-        else:
-            safe_mppi_action = mppi_action
-            has_intervened = False
 
         # Take a step in the environment
         observations, rewards, terminations, truncations, all_done, infos = env.step(
@@ -955,6 +1006,10 @@ def main():
             
             # Reinitialize solver
             solver = WarmStartSolver(config=config)
+            
+            # If using DualGuard MPPI, update the HJ solver reference
+            if args.planner == "dualguard_mppi":
+                nom_controller.set_hj_solver(solver)
 
     # Clean up
     env.close()

@@ -10,6 +10,11 @@ from hj_reachability import dynamics, sets
 from matplotlib import pyplot as plt
 from dataclasses import dataclass
 from time import time as time_pkg
+import sys
+import os
+
+# Add the root directory to the path to import utils
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import dubins_dynamics_tensor
 
 import matplotlib.pyplot as plt
