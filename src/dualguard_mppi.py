@@ -256,6 +256,23 @@ class DualGuardNavigator(Navigator):
         """Set the HJ reachability values and gradients."""
         if self.planner_type == "dualguard_mppi" and self.planner is not None:
             self.planner.set_hj_values(values, values_grad)
+    
+    def get_command(self):
+        """Override to handle dualguard_mppi planner type."""
+        x = self._state_torch[0]
+        y = self._state_torch[1]
+        dist_goal = torch.sqrt(
+            (x - self._goal_torch[0]) ** 2 + (y - self._goal_torch[1]) ** 2
+        )
+        if dist_goal.item() < self._goal_thresh:
+            return torch.tensor([0.0, 0.0], device=self.device, dtype=self.dtype)
+        
+        # Handle both mppi and dualguard_mppi planner types
+        if self.planner_type in ["mppi", "dualguard_mppi"]:
+            command = self.planner.command(self._state_torch)
+            return command
+        
+        return None
             
     def _start_planner(self):
         """Override to create a DualGuardMPPI planner if planner_type is 'dualguard_mppi'."""
