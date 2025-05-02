@@ -33,12 +33,13 @@ MAP_RESOLUTION = 0.25  # units per cell
 N_SENSORS = 128
 MAX_SENSOR_DISTANCE = 10.0
 MAX_SENSOR_DISTANCE = 5.0
+MAX_SENSOR_DISTANCE = 0.1
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # FOV = np.pi / 3  # 45-degree view centered at the front of the agent
 # FOV = np.pi * 2
 
-MARK_FREE_RADIUS = 2.0
+MARK_FREE_RADIUS = 3.0
 
 # BRT (Backward Reachable Tube) parameters
 # https://posggym.readthedocs.io/en/latest/environments/continuous/driving_continuous.html#state-space
@@ -416,7 +417,7 @@ class MapVisualizer:
             self.mppi_ax.set_xlim(0, self.occupancy_map.width)
             self.mppi_ax.set_ylim(
                 self.occupancy_map.height, 0
-            )  # Flip Y-axis to match grid coordinates (0,0 at top-left)
+            )  # Invert Y-axis to match grid coordinates (0,0 at top-left)
             self.mppi_ax.grid(True)
 
             # Add a colorbar for the occupancy map
@@ -647,7 +648,8 @@ class MapVisualizer:
             # Plot the unsafe cells with a red color and visible cell edges
             unsafe_boundary = ax.pcolormesh(
                 X, Y, unsafe_display, 
-                cmap=plt.cm.colors.ListedColormap(['red']),
+                cmap=plt.cm.colors.ListedColormap(["red"]),
+                # cmap="Reds",
                 alpha=0.5,
                 edgecolors='none',
                 linewidths=1.5,
@@ -978,8 +980,11 @@ def main():
             )
 
         # Take a step in the environment
+        # observations, rewards, terminations, truncations, all_done, infos = env.step(
+        #     {"0": safe_mppi_action}
+        # )
         observations, rewards, terminations, truncations, all_done, infos = env.step(
-            {"0": safe_mppi_action}
+            {"0": [0,0]}
         )
         
         # Check for collision

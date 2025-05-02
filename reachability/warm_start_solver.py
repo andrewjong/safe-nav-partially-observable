@@ -60,9 +60,9 @@ class Dubins3DVelocity(dynamics.ControlAndDisturbanceAffineDynamics):
 
     def open_loop_dynamics(self, state, time):
         x, y, theta, v = state  # State now includes velocity v
-        # return jnp.array([v * jnp.cos(theta), v * jnp.sin(theta), 0.0, 0.0])
+        return jnp.array([v * jnp.cos(theta), v * jnp.sin(theta), 0.0, 0.0])
         # turns out in posggym, these x and y are transposed
-        return jnp.array([v * jnp.sin(theta), v * jnp.cos(theta), 0.0, 0.0])
+        # return jnp.array([v * jnp.sin(theta), v * jnp.cos(theta), 0.0, 0.0])
 
     def control_jacobian(self, state, time):
         x, y, theta, v = state  # Updated to unpack 4 state variables
@@ -318,10 +318,10 @@ class WarmStartSolver:
             )
 
         state = np.array(state)
-        next_state = dubins_dynamics_tensor(
-            torch.tensor(state[np.newaxis, :]), action=torch.tensor(nominal_action[np.newaxis, :]), dt=1.0
-        )[0].numpy()
-        is_safe, value, initial_value = self.check_if_safe(next_state, values)
+        # next_state = dubins_dynamics_tensor(
+        #     torch.tensor(state[np.newaxis, :]), action=torch.tensor(nominal_action[np.newaxis, :]), dt=1.0
+        # )[0].numpy()
+        is_safe, value, initial_value = self.check_if_safe(state, values)
 
         action = nominal_action.copy()
         has_intervened = not is_safe
