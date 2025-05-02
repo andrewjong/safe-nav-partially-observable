@@ -32,8 +32,8 @@ from src.dualguard_mppi import DualGuardNavigator
 MAP_RESOLUTION = 0.25  # units per cell
 N_SENSORS = 128
 MAX_SENSOR_DISTANCE = 10.0
-MAX_SENSOR_DISTANCE = 5.0
-MAX_SENSOR_DISTANCE = 0.1
+# MAX_SENSOR_DISTANCE = 5.0
+# MAX_SENSOR_DISTANCE = 0.1
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # FOV = np.pi / 3  # 45-degree view centered at the front of the agent
@@ -990,12 +990,12 @@ def main():
             )
 
         # Take a step in the environment
-        # observations, rewards, terminations, truncations, all_done, infos = env.step(
-        #     {"0": safe_mppi_action}
-        # )
         observations, rewards, terminations, truncations, all_done, infos = env.step(
-            {"0": [0,0]}
+            {"0": safe_mppi_action}
         )
+        # observations, rewards, terminations, truncations, all_done, infos = env.step(
+        #     {"0": [0,0]}
+        # )
         
         # Check for collision
         reward = rewards["0"]
