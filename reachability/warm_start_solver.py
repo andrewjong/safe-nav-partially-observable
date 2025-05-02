@@ -319,11 +319,92 @@ class WarmStartSolver:
         state = np.array(state)
         is_safe, value, initial_value = self.check_if_safe(state, values)
 
-        action = nominal_action
-
+        action = nominal_action.copy()
         has_intervened = not is_safe
 
-        # TODO OPENHANDS
+        # If the current state is not safe, compute a safe action
+        if not is_safe:
+            # Get the state indices in the grid
+            state_ind = self._state_to_grid(state)
+            
+            # Extract the gradient at the current state
+            grad_x = values_grad[0][*state_ind]
+            grad_y = values_grad[1][*state_ind]
+            grad_theta = values_grad[2][*state_ind]
+            grad_v = values_grad[3][*state_ind]
+            
+            # Gradient of the value function at the current state
+            grad_V = np.array([grad_x, grad_y, grad_theta, grad_v])
+            
+            # Extract state components
+            x, y, theta, v = state
+            
+            # Define the dynamics of the system
+            # Open loop dynamics: [v*cos(theta), v*sin(theta), 0, 0]
+            # Control jacobian: [[0, 0], [0, 0], [1, 0], [0, 1]]
+            
+            # Set up the optimization problem
+            u = cp.Variable(2)  # Control input [angular_velocity, linear_acceleration]
+            
+            # Objective: Minimize the squared distance between u and nominal_action
+            objective = cp.Minimize(cp.sum_squares(u - nominal_action))
+            
+            # Constraint: The control should move the system towards the safe set
+            # This means the time derivative of V should be non-negative: dV/dt >= 0
+            # dV/dt = grad_V^T * (f(x) + g(x)*u)
+            # where f(x) is the open loop dynamics and g(x) is the control jacobian
+            
+            # Open loop dynamics contribution
+            f_x = np.array([v * np.cos(theta), v * np.sin(theta), 0.0, 0.0])
+            
+            # Control jacobian
+            g_x = np.array([
+                [0, 0],
+                [0, 0],
+                [1, 0],
+                [0, 1]
+            ])
+            
+            # Safety constraint: grad_V^T * (f(x) + g(x)*u) >= 0
+            # Simplify to: grad_V^T * f(x) + grad_V^T * g(x) * u >= 0
+            # Further simplify to: grad_V^T * g(x) * u >= -grad_V^T * f(x)
+            
+            lhs = grad_V @ g_x  # Left-hand side coefficient for u
+            rhs = -grad_V @ f_x  # Right-hand side constant term
+            
+            # Add safety constraint
+            constraints = [lhs @ u >= rhs]
+            
+            # Add control bounds
+            constraints.append(u[0] >= action_bounds[0, 0])  # min angular velocity
+            constraints.append(u[0] <= action_bounds[0, 1])  # max angular velocity
+            constraints.append(u[1] >= action_bounds[1, 0])  # min linear acceleration
+            constraints.append(u[1] <= action_bounds[1, 1])  # max linear acceleration
+            
+            # Solve the optimization problem
+            prob = cp.Problem(objective, constraints)
+            try:
+                prob.solve()
+                
+                # Check if the problem was solved successfully
+                if prob.status == cp.OPTIMAL or prob.status == cp.OPTIMAL_INACCURATE:
+                    # Update the action with the safe control
+                    action = u.value
+                else:
+                    # If optimization failed, use a simple backup strategy:
+                    # Move in the direction of the gradient of the value function
+                    # This is a simple approach that may not be optimal but should improve safety
+                    control_direction = lhs / (np.linalg.norm(lhs) + 1e-6)  # Normalize
+                    
+                    # Scale the control direction to fit within bounds
+                    action[0] = np.clip(nominal_action[0] + 0.5 * control_direction[0], 
+                                       action_bounds[0, 0], action_bounds[0, 1])
+                    action[1] = np.clip(nominal_action[1] + 0.5 * control_direction[1], 
+                                       action_bounds[1, 0], action_bounds[1, 1])
+            except Exception as e:
+                print(f"Optimization failed: {e}")
+                # Fall back to nominal action if optimization fails completely
+                action = nominal_action
 
         return action, value, initial_value, has_intervened
 
