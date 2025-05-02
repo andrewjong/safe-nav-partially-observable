@@ -178,7 +178,7 @@ class OccupancyMap:
         """
         return 0 <= row < self.grid_height and 0 <= col < self.grid_width
 
-    def update_from_lidar(self, lidar_distances, vehicle_x, vehicle_y, vehicle_angle, debug=False):
+    def update_from_lidar(self, lidar_distances, vehicle_x, vehicle_y, vehicle_angle, fov=2*math.pi, debug=False):
         """
         Update the occupancy map based on lidar observations.
 
@@ -187,6 +187,7 @@ class OccupancyMap:
             vehicle_x (float): X coordinate of the vehicle in world units
             vehicle_y (float): Y coordinate of the vehicle in world units
             vehicle_angle (float): Orientation of the vehicle in radians
+            fov (float): Field of view in radians (default: 2*pi for 360 degrees)
             debug (bool): Whether to print debug information
         """
         # Store robot position for visualization
@@ -202,10 +203,6 @@ class OccupancyMap:
 
         # Number of lidar beams
         self.n_sensors = len(lidar_distances)
-
-        # Get FOV from environment (assuming it's passed from the environment)
-        # Default to full 360 degrees if not specified
-        fov = getattr(env.model, "fov", 2 * math.pi)
 
         # Calculate angle bounds
         angle_min = -fov / 2
@@ -861,7 +858,7 @@ def main():
         env.render()
 
         # Update occupancy map from lidar observations
-        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
+        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle, fov=FOV)
 
         # Get initial safe set (free cells)
         initial_safe_set = occupancy_map.grid == FREE

@@ -375,7 +375,7 @@ def main():
         env.render()
 
         # Update occupancy map from lidar observations
-        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle)
+        occupancy_map.update_from_lidar(lidar_distances, vehicle_x, vehicle_y, vehicle_angle, fov=FOV)
 
         # Get initial safe set (free cells)
         initial_safe_set = occupancy_map.grid == FREE
