@@ -28,7 +28,7 @@ from src.dualguard_mppi import DualGuardNavigator
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
-NUM_TRIALS = 100
+NUM_STEPS = 100
 
 # Environment setup
 MAP_RESOLUTION = 0.5  # units per cell
@@ -1020,7 +1020,7 @@ def main():
             print(f"Information gain enabled with weight {args.info_gain_weight}")
     
     # Main simulation loop
-    for _ in range(NUM_TRIALS):
+    for _ in range(NUM_STEPS):
         # Get current observation
         observation = observations["0"]
         lidar_distances = observation[0:N_SENSORS]
