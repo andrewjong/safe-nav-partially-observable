@@ -632,25 +632,87 @@ class MapVisualizer:
         )
         cbar = plt.colorbar(value_heatmap, ax=ax, label="Value Function")
 
-        # Plot the zero level set (boundary of unsafe set)
+        # Plot the unsafe boundary by tracing cell boundaries
         try:
-            unsafe_boundary = ax.contour(
-                X, Y, value_slice, levels=[0], colors="red", linewidths=2
+            # Create a binary mask for unsafe cells (value <= 0)
+            unsafe_mask = value_slice <= 0
+            
+            # Create a new array with NaN for safe cells and 1 for unsafe cells
+            unsafe_display = np.where(unsafe_mask, 1, np.nan)
+            
+            # Plot the unsafe cells with a red color and visible cell edges
+            unsafe_boundary = ax.pcolormesh(
+                X, Y, unsafe_display, 
+                cmap=plt.cm.colors.ListedColormap(['red']),
+                alpha=0.5,
+                edgecolors='red',
+                linewidths=1.5,
+                shading='auto'
             )
-            ax.clabel(unsafe_boundary, inline=True, fontsize=10, fmt="Unsafe")
-        except:
-            print("Could not plot unsafe boundary - no zero level set found")
+            
+            # Add a text annotation for the unsafe region
+            # Find the center of the largest unsafe region
+            if np.any(unsafe_mask):
+                from scipy import ndimage
+                # Label connected regions
+                labeled_mask, num_features = ndimage.label(unsafe_mask)
+                if num_features > 0:
+                    # Find the largest region
+                    largest_region = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1
+                    # Get coordinates of the largest region
+                    y_indices, x_indices = np.where(labeled_mask == largest_region)
+                    if len(y_indices) > 0:
+                        # Calculate center of the region
+                        center_y = int(np.mean(y_indices))
+                        center_x = int(np.mean(x_indices))
+                        # Add text annotation
+                        ax.text(X[center_y, center_x], Y[center_y, center_x], 
+                                "Unsafe", color='white', fontweight='bold',
+                                ha='center', va='center')
+        except Exception as e:
+            print(f"Could not plot unsafe boundary: {e}")
 
-        # Plot the fail set boundary
+        # Plot the fail set boundary by tracing cell boundaries
         try:
             # Convert fail_set to numpy array if it's not already
             fail_set_np = np.array(fail_set)
-            fail_boundary = ax.contour(
-                X, Y, fail_set_np, levels=[0.5], colors="black", linewidths=2
+            
+            # Create a binary mask for fail cells
+            fail_mask = fail_set_np > 0.5
+            
+            # Create a new array with NaN for non-fail cells and 1 for fail cells
+            fail_display = np.where(fail_mask, 1, np.nan)
+            
+            # Plot the fail cells with a black color and visible cell edges
+            fail_boundary = ax.pcolormesh(
+                X, Y, fail_display, 
+                cmap=plt.cm.colors.ListedColormap(['black']),
+                alpha=0.5,
+                edgecolors='black',
+                linewidths=1.5,
+                shading='auto'
             )
-            ax.clabel(fail_boundary, inline=True, fontsize=10, fmt="Fail")
-        except:
-            print("Could not plot fail set boundary")
+            
+            # Add a text annotation for the fail region
+            if np.any(fail_mask):
+                from scipy import ndimage
+                # Label connected regions
+                labeled_mask, num_features = ndimage.label(fail_mask)
+                if num_features > 0:
+                    # Find the largest region
+                    largest_region = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1
+                    # Get coordinates of the largest region
+                    y_indices, x_indices = np.where(labeled_mask == largest_region)
+                    if len(y_indices) > 0:
+                        # Calculate center of the region
+                        center_y = int(np.mean(y_indices))
+                        center_x = int(np.mean(x_indices))
+                        # Add text annotation
+                        ax.text(X[center_y, center_x], Y[center_y, center_x], 
+                                "Fail", color='white', fontweight='bold',
+                                ha='center', va='center')
+        except Exception as e:
+            print(f"Could not plot fail set boundary: {e}")
 
         # Plot the vehicle position with color based on safety intervention
         robot_color = "cyan" if safety_intervening else "red"
