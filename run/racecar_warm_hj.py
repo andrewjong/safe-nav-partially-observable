@@ -87,7 +87,8 @@ class OccupancyMap:
         self.grid_height = int(np.ceil(height / resolution))
 
         # Initialize grid with all cells marked as UNSEEN
-        self.grid = np.zeros((self.grid_height, self.grid_width), dtype=np.uint8)
+        # Changed to match warm start solver convention: X as first dimension, Y as second
+        self.grid = np.zeros((self.grid_width, self.grid_height), dtype=np.uint8)
 
         # Last known robot position for visualization
         self.last_robot_pos = None
@@ -116,25 +117,25 @@ class OccupancyMap:
         radius_grid = int(np.ceil(radius / self.resolution))
         
         # Get the robot's position in grid coordinates
-        center_row, center_col = self.world_to_grid(robot_x, robot_y)
+        center_x, center_y = self.world_to_grid(robot_x, robot_y)
         
         # Determine the bounds of the circle in grid coordinates
-        min_row = max(0, center_row - radius_grid)
-        max_row = min(self.grid_height - 1, center_row + radius_grid)
-        min_col = max(0, center_col - radius_grid)
-        max_col = min(self.grid_width - 1, center_col + radius_grid)
+        min_x = max(0, center_x - radius_grid)
+        max_x = min(self.grid_width - 1, center_x + radius_grid)
+        min_y = max(0, center_y - radius_grid)
+        max_y = min(self.grid_height - 1, center_y + radius_grid)
         
         # Mark all cells within the radius as FREE
-        for row in range(min_row, max_row + 1):
-            for col in range(min_col, max_col + 1):
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
                 # Calculate squared distance from center
-                dr = row - center_row
-                dc = col - center_col
-                dist_squared = dr * dr + dc * dc
+                dx = x - center_x
+                dy = y - center_y
+                dist_squared = dx * dx + dy * dy
                 
                 # If the cell is within the radius, mark it as FREE
                 if dist_squared <= radius_grid * radius_grid:
-                    self.grid[row, col] = FREE
+                    self.grid[x, y] = FREE
 
     def world_to_grid(self, x, y):
         """
@@ -145,45 +146,48 @@ class OccupancyMap:
             y (float): Y coordinate in world units
 
         Returns:
-            tuple: (grid_row, grid_col) indices
+            tuple: (grid_x, grid_y) indices
         """
         # Use proper rounding instead of truncation to get the nearest grid cell
-        grid_col = int(round(x / self.resolution))
-        grid_row = int(round(y / self.resolution))
+        # Changed to match warm start solver convention: X as first dimension, Y as second
+        grid_x = int(round(x / self.resolution))
+        grid_y = int(round(y / self.resolution))
 
         # Ensure indices are within grid bounds
-        grid_row = max(0, min(grid_row, self.grid_height - 1))
-        grid_col = max(0, min(grid_col, self.grid_width - 1))
+        grid_x = max(0, min(grid_x, self.grid_width - 1))
+        grid_y = max(0, min(grid_y, self.grid_height - 1))
 
-        return grid_row, grid_col
+        return grid_x, grid_y
 
-    def grid_to_world(self, row, col):
+    def grid_to_world(self, grid_x, grid_y):
         """
         Convert grid indices to world coordinates (center of cell).
 
         Args:
-            row (int): Grid row index
-            col (int): Grid column index
+            grid_x (int): Grid x index
+            grid_y (int): Grid y index
 
         Returns:
             tuple: (x, y) coordinates in world units
         """
-        x = col * self.resolution
-        y = row * self.resolution
+        # Changed to match warm start solver convention: X as first dimension, Y as second
+        x = grid_x * self.resolution
+        y = grid_y * self.resolution
         return x, y
 
-    def is_in_bounds(self, row, col):
+    def is_in_bounds(self, grid_x, grid_y):
         """
         Check if grid indices are within the grid bounds.
 
         Args:
-            row (int): Grid row index
-            col (int): Grid column index
+            grid_x (int): Grid x index
+            grid_y (int): Grid y index
 
         Returns:
             bool: True if indices are within bounds, False otherwise
         """
-        return 0 <= row < self.grid_height and 0 <= col < self.grid_width
+        # Changed to match warm start solver convention: X as first dimension, Y as second
+        return 0 <= grid_x < self.grid_width and 0 <= grid_y < self.grid_height
 
     def update_from_lidar(self, lidar_distances, vehicle_x, vehicle_y, vehicle_angle, fov=2*math.pi, debug=False):
         """
@@ -202,11 +206,11 @@ class OccupancyMap:
         self.last_robot_angle = vehicle_angle
 
         # Get robot position in grid coordinates
-        robot_row, robot_col = self.world_to_grid(vehicle_x, vehicle_y)
+        robot_x, robot_y = self.world_to_grid(vehicle_x, vehicle_y)
 
         if debug:
             print(f"Robot world position: ({vehicle_x}, {vehicle_y})")
-            print(f"Robot grid position: ({robot_row}, {robot_col})")
+            print(f"Robot grid position: ({robot_x}, {robot_y})")
 
         # Number of lidar beams
         self.n_sensors = len(lidar_distances)
@@ -243,16 +247,16 @@ class OccupancyMap:
                 obstacle_detected = True
 
             # Convert end point to grid coordinates
-            end_row, end_col = self.world_to_grid(end_x, end_y)
+            end_x_grid, end_y_grid = self.world_to_grid(end_x, end_y)
 
             if current_debug:
                 print(f"Beam {i}: angle={beam_angle:.2f}, distance={distance:.2f}")
                 print(f"  End point world: ({end_x:.2f}, {end_y:.2f})")
-                print(f"  End point grid: ({end_row}, {end_col})")
+                print(f"  End point grid: ({end_x_grid}, {end_y_grid})")
                 print(f"  Obstacle detected: {obstacle_detected}")
 
             # Use Bresenham's line algorithm to trace the beam
-            cells = self.bresenham_line(robot_row, robot_col, end_row, end_col)
+            cells = self.bresenham_line(robot_x, robot_y, end_x_grid, end_y_grid)
 
             if current_debug:
                 print(f"  Cells along beam: {len(cells)}")
@@ -260,66 +264,66 @@ class OccupancyMap:
                     print(f"  First cell: {cells[0]}, Last cell: {cells[-1]}")
 
             # Mark cells along the beam as free, except the last one if obstacle detected
-            for j, (row, col) in enumerate(cells):
+            for j, (x, y) in enumerate(cells):
                 if j == len(cells) - 1 and obstacle_detected:
                     # Last cell contains obstacle
-                    self.grid[row, col] = OCCUPIED
+                    self.grid[x, y] = OCCUPIED
                     if current_debug:
-                        print(f"  Marking cell ({row}, {col}) as OCCUPIED")
+                        print(f"  Marking cell ({x}, {y}) as OCCUPIED")
                 else:
                     # Intermediate cells are free
-                    self.grid[row, col] = FREE
+                    self.grid[x, y] = FREE
                     if current_debug and j == len(cells) - 1:
-                        print(f"  Marking cell ({row}, {col}) as FREE")
+                        print(f"  Marking cell ({x}, {y}) as FREE")
 
-    def bresenham_line(self, row1, col1, row2, col2):
+    def bresenham_line(self, x1, y1, x2, y2):
         """
         Implementation of Bresenham's line algorithm to get all grid cells along a line.
 
         Args:
-            row1, col1 (int): Starting grid cell indices
-            row2, col2 (int): Ending grid cell indices
+            x1, y1 (int): Starting grid cell indices
+            x2, y2 (int): Ending grid cell indices
 
         Returns:
-            list: List of (row, col) tuples representing grid cells along the line
+            list: List of (x, y) tuples representing grid cells along the line
         """
         cells = []
 
         # Calculate differences and step directions
-        d_row = abs(row2 - row1)
-        d_col = abs(col2 - col1)
+        d_x = abs(x2 - x1)
+        d_y = abs(y2 - y1)
 
         # Determine step direction
-        s_row = 1 if row1 < row2 else -1
-        s_col = 1 if col1 < col2 else -1
+        s_x = 1 if x1 < x2 else -1
+        s_y = 1 if y1 < y2 else -1
 
         # Error value
-        err = d_col - d_row
+        err = d_x - d_y
 
         # Current position
-        row, col = row1, col1
+        x, y = x1, y1
 
         # Iterate until we reach the end point
         while True:
             # Add current cell if it's within bounds
-            if self.is_in_bounds(row, col):
-                cells.append((row, col))
+            if self.is_in_bounds(x, y):
+                cells.append((x, y))
 
             # Check if we've reached the end
-            if row == row2 and col == col2:
+            if x == x2 and y == y2:
                 break
 
             # Calculate error for next step
             e2 = 2 * err
 
             # Update position and error
-            if e2 > -d_row:
-                err -= d_row
-                col += s_col
+            if e2 > -d_y:
+                err -= d_y
+                x += s_x
 
-            if e2 < d_col:
-                err += d_col
-                row += s_row
+            if e2 < d_x:
+                err += d_x
+                y += s_y
 
         return cells
 
@@ -383,7 +387,7 @@ class MapVisualizer:
 
             # Reset the grid data
             if self.occupancy_img is not None:
-                self.occupancy_img.set_data(self.occupancy_map.grid)
+                self.occupancy_img.set_data(self.occupancy_map.grid.T)
 
             # Reset legend state
             self.legend_added = False
@@ -421,8 +425,9 @@ class MapVisualizer:
             self.mppi_ax.grid(True)
 
             # Add a colorbar for the occupancy map
+            # Transpose the grid to match the visualization convention
             self.occupancy_img = self.mppi_ax.imshow(
-                self.occupancy_map.grid,
+                self.occupancy_map.grid.T,  # Transpose to match visualization convention
                 cmap=plt.cm.colors.ListedColormap(["gray", "white", "black"]),
                 norm=plt.cm.colors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5], 3),
                 origin="upper",  # This is correct - origin at top-left
@@ -451,7 +456,7 @@ class MapVisualizer:
 
         # Update the occupancy map in the continuous space visualization
         if self.occupancy_img is not None:
-            self.occupancy_img.set_data(self.occupancy_map.grid)
+            self.occupancy_img.set_data(self.occupancy_map.grid.T)
 
         # Update robot position in continuous space
         if self.occupancy_map.last_robot_pos is not None:
