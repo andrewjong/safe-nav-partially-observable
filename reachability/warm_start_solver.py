@@ -15,7 +15,7 @@ import os
 
 # Add the root directory to the path to import utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import dubins_dynamics_tensor
+from utils import *
 
 import matplotlib.pyplot as plt
 
@@ -29,7 +29,7 @@ class WarmStartSolverConfig:
     domain: np.ndarray
     mode: str  # "brs" or "brt"
     accuracy: str  # "low", "medium", "high", "very_high"
-    superlevel_set_epsilon: float = 0.5
+    superlevel_set_epsilon: float
     converged_values: np.ndarray | None = None
     until_convergent: bool = True
     print_progress: bool = True
@@ -394,11 +394,11 @@ class WarmStartSolver:
             # if min_distance < float("inf"):
             if best_safety_value > float("-inf"):
                 action = best_action
-                print("Safe action found in grid search")
+                print(f"{BOLD_CYAN}Safe action found in grid search{RESET}")
             else:
                 # If no safe action was found in the grid, use a fallback strategy
                 # Move in the direction of the gradient of the value function
-                print("No safe action found in grid search, using gradient-based fallback")
+                print(f"{BOLD_RED}No safe action found in grid search, using gradient-based fallback{RESET}")
                 if np.linalg.norm(lhs) > 1e-6:  # Ensure we don't divide by zero
                     control_direction = lhs / np.linalg.norm(lhs)  # Normalize
 

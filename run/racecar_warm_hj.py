@@ -29,10 +29,10 @@ from src.dualguard_mppi import DualGuardNavigator
 # -----------------------------------------------------------------------------
 
 # Environment setup
-MAP_RESOLUTION = 0.25  # units per cell
+MAP_RESOLUTION = 0.5  # units per cell
 N_SENSORS = 128
-MAX_SENSOR_DISTANCE = 10.0
-# MAX_SENSOR_DISTANCE = 5.0
+# MAX_SENSOR_DISTANCE = 10.0
+MAX_SENSOR_DISTANCE = 5.0
 # MAX_SENSOR_DISTANCE = 0.1
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
@@ -866,6 +866,7 @@ def main():
         ]),
         mode="brt",
         accuracy="medium",
+        superlevel_set_epsilon=0.8,
         converged_values=None,
         until_convergent=True,
         print_progress=False,
