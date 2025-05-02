@@ -645,7 +645,7 @@ class MapVisualizer:
                 X, Y, unsafe_display, 
                 cmap=plt.cm.colors.ListedColormap(['red']),
                 alpha=0.5,
-                edgecolors='red',
+                edgecolors='none',
                 linewidths=1.5,
                 shading='auto'
             )
@@ -688,7 +688,7 @@ class MapVisualizer:
                 X, Y, fail_display, 
                 cmap=plt.cm.colors.ListedColormap(['black']),
                 alpha=0.5,
-                edgecolors='black',
+                edgecolors='none',
                 linewidths=1.5,
                 shading='auto'
             )
