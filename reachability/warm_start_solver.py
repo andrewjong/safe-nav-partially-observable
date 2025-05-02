@@ -162,17 +162,8 @@ class WarmStartSolver:
 
         :return: system-dim-D numpy array of initial values. e.g. for dubins3d, this is a 3D array
         """
-        if self.config.system_name == "dubins3d":
-            initial_values = (
-                grid_map - 0.5
-            )  # offset to make sure the distance is 0 at the border
-            initial_values = skfmm.distance(initial_values, dx=dx)
-            initial_values = np.tile(
-                initial_values[:, :, np.newaxis], (1, 1, self.config.domain_cells[2])
-            )
-            return initial_values
-        elif self.config.system_name == "dubins3d_velocity":
-            initial_values = grid_map - 0.5
+        if self.config.system_name == "dubins3d_velocity":
+            initial_values = grid_map
             initial_values = skfmm.distance(initial_values, dx=dx)
             initial_values = np.tile(
                 initial_values[:, :, np.newaxis, np.newaxis],
@@ -326,81 +317,86 @@ class WarmStartSolver:
         if not is_safe:
             # Get the state indices in the grid
             state_ind = self.state_to_grid(state)
-            
+
             # Extract the gradient at the current state
             grad_x = values_grad[0][*state_ind]
             grad_y = values_grad[1][*state_ind]
             grad_theta = values_grad[2][*state_ind]
             grad_v = values_grad[3][*state_ind]
-            
+
             # Gradient of the value function at the current state
             grad_V = np.array([grad_x, grad_y, grad_theta, grad_v])
-            
+
             # Extract state components
             x, y, theta, v = state
-            
+
             # Open loop dynamics contribution
             f_x = np.array([v * np.cos(theta), v * np.sin(theta), 0.0, 0.0])
-            
+
             # Control jacobian
-            g_x = np.array([
-                [0, 0],
-                [0, 0],
-                [1, 0],
-                [0, 1]
-            ])
-            
+            g_x = np.array([[0, 0], [0, 0], [1, 0], [0, 1]])
+
             # Safety constraint: grad_V^T * (f(x) + g(x)*u) >= 0
             # Simplify to: grad_V^T * f(x) + grad_V^T * g(x) * u >= 0
             # Further simplify to: grad_V^T * g(x) * u >= -grad_V^T * f(x)
-            
+
             lhs = grad_V @ g_x  # Left-hand side coefficient for u
             rhs = -grad_V @ f_x  # Right-hand side constant term
-            
+
             # Grid search parameters
             n_grid_points = 15  # Number of grid points in each dimension
-            
+
             # Create grid of possible control inputs
-            angular_vel_grid = np.linspace(action_bounds[0, 0], action_bounds[0, 1], n_grid_points)
-            linear_acc_grid = np.linspace(action_bounds[1, 0], action_bounds[1, 1], n_grid_points)
-            
+            angular_vel_grid = np.linspace(
+                action_bounds[0, 0], action_bounds[0, 1], n_grid_points
+            )
+            linear_acc_grid = np.linspace(
+                action_bounds[1, 0], action_bounds[1, 1], n_grid_points
+            )
+
             # Initialize variables to track the best action
             best_action = nominal_action.copy()
-            min_distance = float('inf')
-            
+            min_distance = float("inf")
+
             # Perform grid search
             for ang_vel in angular_vel_grid:
                 for lin_acc in linear_acc_grid:
                     # Current control input
                     u = np.array([ang_vel, lin_acc])
-                    
+
                     # Check if this control satisfies the safety constraint
                     safety_value = lhs @ u + rhs
-                    
+
                     # If the control is safe (safety_value >= 0), check if it's closer to nominal
                     if safety_value >= 0:
                         # Calculate distance to nominal action
-                        distance = np.sum((u - nominal_action)**2)
-                        
+                        distance = np.sum((u - nominal_action) ** 2)
+
                         # Update best action if this one is closer to nominal
                         if distance < min_distance:
                             min_distance = distance
                             best_action = u.copy()
-            
+
             # If we found a safe action, use it
-            if min_distance < float('inf'):
+            if min_distance < float("inf"):
                 action = best_action
             else:
                 # If no safe action was found in the grid, use a fallback strategy
                 # Move in the direction of the gradient of the value function
                 if np.linalg.norm(lhs) > 1e-6:  # Ensure we don't divide by zero
                     control_direction = lhs / np.linalg.norm(lhs)  # Normalize
-                    
+
                     # Scale the control direction to fit within bounds
-                    action[0] = np.clip(nominal_action[0] + 0.5 * control_direction[0], 
-                                       action_bounds[0, 0], action_bounds[0, 1])
-                    action[1] = np.clip(nominal_action[1] + 0.5 * control_direction[1], 
-                                       action_bounds[1, 0], action_bounds[1, 1])
+                    action[0] = np.clip(
+                        nominal_action[0] + 0.5 * control_direction[0],
+                        action_bounds[0, 0],
+                        action_bounds[0, 1],
+                    )
+                    action[1] = np.clip(
+                        nominal_action[1] + 0.5 * control_direction[1],
+                        action_bounds[1, 0],
+                        action_bounds[1, 1],
+                    )
                 else:
                     # If gradient is too small, just use the nominal action
                     action = nominal_action

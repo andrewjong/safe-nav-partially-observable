@@ -559,13 +559,13 @@ class MapVisualizer:
 
     def visualize_hj_level_set(
         self,
-        solver,
-        values,
-        fail_set,
-        vehicle_x,
-        vehicle_y,
-        vehicle_angle,
-        vehicle_velocity,
+        solver: WarmStartSolver,
+        values: np.ndarray,
+        fail_set: np.ndarray,
+        vehicle_x: float,
+        vehicle_y: float,
+        vehicle_angle: float,
+        vehicle_velocity: float,
         safety_intervening=False,
     ):
         """
@@ -597,6 +597,8 @@ class MapVisualizer:
         angle_index = state_ind[2]
         velocity_index = state_ind[3]
         value_slice = np.array(values[:, :, angle_index, velocity_index])
+        current_state_value = values[*state_ind]
+        print(f"Current state value: {current_state_value}")
 
         # Create coordinate meshgrid for plotting
         x = np.linspace(0, self.occupancy_map.width, self.occupancy_map.grid_width)
@@ -670,46 +672,46 @@ class MapVisualizer:
             print(f"Could not plot unsafe boundary: {e}")
 
         # Plot the fail set boundary by tracing cell boundaries
-        try:
-            # Convert fail_set to numpy array if it's not already
-            fail_set_np = np.array(fail_set)
+        # try:
+        #     # Convert fail_set to numpy array if it's not already
+        #     fail_set_np = np.array(fail_set)
             
-            # Create a binary mask for fail cells
-            fail_mask = fail_set_np > 0.5
+        #     # Create a binary mask for fail cells
+        #     fail_mask = fail_set_np > 0.5
             
-            # Create a new array with NaN for non-fail cells and 1 for fail cells
-            fail_display = np.where(fail_mask, 1, np.nan)
+        #     # Create a new array with NaN for non-fail cells and 1 for fail cells
+        #     fail_display = np.where(fail_mask, 1, np.nan)
             
-            # Plot the fail cells with a black color and visible cell edges
-            fail_boundary = ax.pcolormesh(
-                X, Y, fail_display, 
-                cmap=plt.cm.colors.ListedColormap(['black']),
-                alpha=0.5,
-                edgecolors='none',
-                linewidths=1.5,
-                shading='auto'
-            )
+        #     # Plot the fail cells with a black color and visible cell edges
+        #     fail_boundary = ax.pcolormesh(
+        #         X, Y, fail_display, 
+        #         cmap=plt.cm.colors.ListedColormap(['black']),
+        #         alpha=0.5,
+        #         edgecolors='none',
+        #         linewidths=1.5,
+        #         shading='auto'
+        #     )
             
-            # Add a text annotation for the fail region
-            if np.any(fail_mask):
-                from scipy import ndimage
-                # Label connected regions
-                labeled_mask, num_features = ndimage.label(fail_mask)
-                if num_features > 0:
-                    # Find the largest region
-                    largest_region = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1
-                    # Get coordinates of the largest region
-                    y_indices, x_indices = np.where(labeled_mask == largest_region)
-                    if len(y_indices) > 0:
-                        # Calculate center of the region
-                        center_y = int(np.mean(y_indices))
-                        center_x = int(np.mean(x_indices))
-                        # Add text annotation
-                        ax.text(X[center_y, center_x], Y[center_y, center_x], 
-                                "Fail", color='white', fontweight='bold',
-                                ha='center', va='center')
-        except Exception as e:
-            print(f"Could not plot fail set boundary: {e}")
+        #     # Add a text annotation for the fail region
+        #     if np.any(fail_mask):
+        #         from scipy import ndimage
+        #         # Label connected regions
+        #         labeled_mask, num_features = ndimage.label(fail_mask)
+        #         if num_features > 0:
+        #             # Find the largest region
+        #             largest_region = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1
+        #             # Get coordinates of the largest region
+        #             y_indices, x_indices = np.where(labeled_mask == largest_region)
+        #             if len(y_indices) > 0:
+        #                 # Calculate center of the region
+        #                 center_y = int(np.mean(y_indices))
+        #                 center_x = int(np.mean(x_indices))
+        #                 # Add text annotation
+        #                 ax.text(X[center_y, center_x], Y[center_y, center_x], 
+        #                         "Fail", color='white', fontweight='bold',
+        #                         ha='center', va='center')
+        # except Exception as e:
+        #     print(f"Could not plot fail set boundary: {e}")
 
         # Plot the vehicle position with color based on safety intervention
         robot_color = "cyan" if safety_intervening else "red"
