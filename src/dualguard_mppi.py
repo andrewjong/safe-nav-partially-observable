@@ -501,7 +501,8 @@ class DualGuardNavigator(Navigator):
     Navigator that uses DualGuardMPPI for planning.
     """
     
-    def __init__(self, hj_solver=None, safety_threshold=0.0, gradient_scale=1.0, **kwargs):
+    def __init__(self, hj_solver=None, safety_threshold=0.0, gradient_scale=1.0, 
+                 use_info_gain=False, info_gain_weight=0.5, **kwargs):
         # Store HJ solver and parameters before calling super().__init__
         self.hj_solver = hj_solver
         self.safety_threshold = safety_threshold
@@ -509,6 +510,9 @@ class DualGuardNavigator(Navigator):
         
         # Set planner_type to "dualguard_mppi"
         kwargs["planner_type"] = "dualguard_mppi"
+        # Pass information gain parameters to parent class
+        kwargs["use_info_gain"] = use_info_gain
+        kwargs["info_gain_weight"] = info_gain_weight
         super().__init__(**kwargs)
         
     def set_hj_solver(self, hj_solver):

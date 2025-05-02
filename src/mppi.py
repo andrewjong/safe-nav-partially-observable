@@ -409,13 +409,20 @@ class MPPI:
 
 
 class Navigator:
-    def __init__(self, planner_type="mppi", device="cpu", dtype=torch.float32, dt=0.1, robot_radius=0.0):
+    def __init__(self, planner_type="mppi", device="cpu", dtype=torch.float32, dt=0.1, robot_radius=0.0, 
+                 use_info_gain=False, info_gain_weight=0.5):
 
         self.device = device
         self.dtype = dtype
         self.dt = dt
         self.planner_type = planner_type
         self.robot_radius = robot_radius  # Add robot radius parameter
+        
+        # Information gain parameters
+        self.use_info_gain = use_info_gain
+        self.info_gain_weight = info_gain_weight
+        self.fov_angle = torch.pi / 4  # Default FOV angle (45 degrees)
+        self.sensor_range = 5.0  # Default sensor range
 
         self._state_torch = None
         self.planner = self._start_planner()
@@ -463,6 +470,92 @@ class Navigator:
         self._map_origin_torch = torch.tensor(
             [map_origin[0], map_origin[1]], dtype=self.dtype, device=self.device
         )
+        
+    def _compute_info_gain(self, states, actions=None):
+        """
+        Compute the potential information gain for a batch of states.
+        
+        This function estimates how much new information (unseen cells) 
+        would be visible from each state position and orientation.
+        
+        Args:
+            states (torch.Tensor): Batch of states with shape (num_samples, dim_x)
+                                  where states[:, 0] is x, states[:, 1] is y, states[:, 2] is theta
+            actions (torch.Tensor, optional): Batch of actions (not used in this implementation)
+            
+        Returns:
+            torch.Tensor: Information gain scores for each state with shape (num_samples,)
+                         Higher values indicate more potential information gain
+        """
+        if not self.use_info_gain or self._map_torch is None:
+            # Return zero information gain if not enabled or no map available
+            return torch.zeros(states.shape[0], device=self.device, dtype=self.dtype)
+        
+        # Extract positions and orientations
+        positions = states[:, :2]  # x, y positions
+        thetas = states[:, 2]      # orientations
+        
+        # Initialize information gain scores
+        info_gain = torch.zeros(states.shape[0], device=self.device, dtype=self.dtype)
+        
+        # Get map dimensions
+        map_height, map_width = self._map_torch.shape
+        
+        # For each state, cast rays and count unseen cells
+        for i in range(states.shape[0]):
+            x, y = positions[i]
+            theta = thetas[i]
+            
+            # Convert world coordinates to grid indices
+            grid_x = torch.floor((x - self._map_origin_torch[0]) / self._cell_size).long()
+            grid_y = torch.floor((y - self._map_origin_torch[1]) / self._cell_size).long()
+            
+            # Skip if position is outside the map
+            if (grid_x < 0 or grid_x >= map_width or grid_y < 0 or grid_y >= map_height):
+                continue
+                
+            # Calculate angles for rays within the FOV
+            num_rays = 16  # Number of rays to cast (reduced for efficiency)
+            half_fov = self.fov_angle / 2
+            ray_angles = torch.linspace(-half_fov, half_fov, num_rays, device=self.device) + theta
+            
+            # Count unseen cells along each ray
+            unseen_count = 0
+            for angle in ray_angles:
+                # Calculate ray direction
+                dx = torch.cos(angle)
+                dy = torch.sin(angle)
+                
+                # Cast ray from current position
+                max_dist = self.sensor_range / self._cell_size  # Convert to grid units
+                step_size = 0.5  # Step size in grid units
+                
+                for step in torch.arange(0, max_dist, step_size, device=self.device):
+                    # Calculate current position along ray
+                    curr_x = grid_x + dx * step
+                    curr_y = grid_y + dy * step
+                    
+                    # Convert to integer indices
+                    idx_x = torch.floor(curr_x).long()
+                    idx_y = torch.floor(curr_y).long()
+                    
+                    # Check if within map bounds
+                    if (idx_x < 0 or idx_x >= map_width or idx_y < 0 or idx_y >= map_height):
+                        break
+                    
+                    # Check cell status (0 = unseen)
+                    if self._map_torch[idx_y, idx_x] == 0:
+                        unseen_count += 1
+                        
+                    # Stop ray if we hit an obstacle
+                    if self._map_torch[idx_y, idx_x] == 2:  # 2 = occupied
+                        break
+            
+            # Normalize by the maximum possible unseen cells
+            max_possible_unseen = num_rays * (max_dist / step_size)
+            info_gain[i] = unseen_count / max_possible_unseen
+        
+        return info_gain
 
     def set_goal(self, position):
         """
@@ -668,6 +761,13 @@ class Navigator:
         # Collision cost
         collision_cost = self._compute_collision_cost(current_state, action)
         
+        # Information gain cost (negative because we want to maximize information gain)
+        info_gain_cost = torch.zeros_like(dist_goal_cost)
+        if self.use_info_gain:
+            # Calculate information gain and negate it (since we're minimizing cost)
+            info_gain = self._compute_info_gain(current_state, action)
+            info_gain_cost = -self.info_gain_weight * info_gain
+        
         # # Penalize large changes in linear velocity to reduce oscillations
         # # Prefer constant positive linear velocity (close to 1.5)
         # # Heavily penalize negative or zero linear velocity to prevent backwards motion
@@ -685,6 +785,7 @@ class Navigator:
                 # + weights[1] * collision_cost 
                 # + weights[2] * linear_vel_cost 
                 # + weights[3] * angular_vel_cost
+                + info_gain_cost  # Add information gain cost
                 )
         
         return cost

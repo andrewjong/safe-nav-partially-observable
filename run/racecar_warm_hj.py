@@ -825,6 +825,17 @@ def parse_args():
         default=0.0,
         help="Value above which states are considered safe in DualGuard MPPI"
     )
+    parser.add_argument(
+        "--use_info_gain",
+        action="store_true",
+        help="Enable information gain in the cost function to encourage exploration of unseen areas"
+    )
+    parser.add_argument(
+        "--info_gain_weight",
+        type=float,
+        default=0.5,
+        help="Weight for information gain in the cost function (only used if --use_info_gain is set)"
+    )
     return parser.parse_args()
 
 def main():
@@ -892,15 +903,31 @@ def main():
     # Initialize the appropriate controller based on the planner type
     if args.planner == "mppi":
         print("Using vanilla MPPI planner")
-        nom_controller = Navigator(robot_radius=env.model.world.agent_radius)
+        nom_controller = Navigator(
+            robot_radius=env.model.world.agent_radius,
+            use_info_gain=args.use_info_gain,
+            info_gain_weight=args.info_gain_weight
+        )
+        # Set FOV and sensor range to match environment settings
+        nom_controller.fov_angle = FOV
+        nom_controller.sensor_range = MAX_SENSOR_DISTANCE
+        if args.use_info_gain:
+            print(f"Information gain enabled with weight {args.info_gain_weight}")
     else:  # dualguard_mppi
         print("Using DualGuard MPPI planner")
         nom_controller = DualGuardNavigator(
             hj_solver=solver,
             safety_threshold=args.safety_threshold,
             gradient_scale=args.gradient_scale,
-            robot_radius=env.model.world.agent_radius
+            robot_radius=env.model.world.agent_radius,
+            use_info_gain=args.use_info_gain,
+            info_gain_weight=args.info_gain_weight
         )
+        # Set FOV and sensor range to match environment settings
+        nom_controller.fov_angle = FOV
+        nom_controller.sensor_range = MAX_SENSOR_DISTANCE
+        if args.use_info_gain:
+            print(f"Information gain enabled with weight {args.info_gain_weight}")
     
     # Main simulation loop
     for _ in range(30000):
