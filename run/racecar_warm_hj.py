@@ -459,7 +459,7 @@ class MapVisualizer:
                 self.mppi_fig.canvas.draw_idle()
                 plt.pause(0.001)
 
-    def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None, robot_goal=None):
+    def visualize_mppi_trajectories(self, trajectories, chosen_trajectory=None, robot_goal=None, goal_radius=None):
         """
         Visualize the MPPI sampled trajectories and the chosen trajectory in continuous space.
         
@@ -470,6 +470,7 @@ class MapVisualizer:
             trajectories (torch.Tensor): Tensor of shape (M*K, T, nx) containing sampled trajectories
             chosen_trajectory (torch.Tensor, optional): Tensor of shape (T, nx) containing the chosen trajectory
             robot_goal (tuple, optional): The goal position (x, y) for the robot
+            goal_radius (float, optional): The radius around the goal that counts as reaching the goal
         """
         # Create figure for visualization with occupancy map and MPPI trajectories if it doesn't exist
         if self.mppi_fig is None:
@@ -618,9 +619,28 @@ class MapVisualizer:
                     pass
 
             if robot_goal is not None:
+                # Plot the goal marker
                 self.goal_marker = self.mppi_ax.plot(
                     [robot_goal[0]], [robot_goal[1]], "g*", markersize=15, label="Goal"
                 )[0]
+                
+                # Plot the goal radius if provided
+                if goal_radius is not None:
+                    # Remove previous goal circle if it exists
+                    if hasattr(self, 'goal_circle') and self.goal_circle in self.mppi_ax.patches:
+                        self.goal_circle.remove()
+                    
+                    # Create a new goal circle
+                    self.goal_circle = plt.Circle(
+                        (robot_goal[0], robot_goal[1]), 
+                        goal_radius, 
+                        color='g', 
+                        fill=False, 
+                        linestyle='--', 
+                        linewidth=2,
+                        label="Goal Radius"
+                    )
+                    self.mppi_ax.add_patch(self.goal_circle)
 
         # Add or update legend
         self.mppi_ax.legend()
@@ -708,6 +728,8 @@ class MapVisualizer:
         vehicle_angle: float,
         vehicle_velocity: float,
         safety_intervening=False,
+        robot_goal=None,
+        goal_radius=None,
     ):
         """
         Visualize the HJ reachability level set on a separate heat map plot.
@@ -720,6 +742,8 @@ class MapVisualizer:
             vehicle_angle (float): Current vehicle orientation
             vehicle_velocity (float): Current vehicle velocity
             safety_intervening (bool): Whether the safety filter is currently intervening
+            robot_goal (tuple, optional): The goal position (x, y) for the robot
+            goal_radius (float, optional): The radius around the goal that counts as reaching the goal
         """
         # Check if we already have a figure for HJ visualization
         if self.hj_fig is None:
@@ -908,6 +932,26 @@ class MapVisualizer:
         ax.set_title("HJ Reachability Level Set Visualization")
         ax.set_xlabel("X Position")
         ax.set_ylabel("Y Position")
+
+        # Plot the goal and goal radius if provided
+        if robot_goal is not None:
+            # Plot the goal as a star
+            ax.plot(
+                robot_goal[0], robot_goal[1], "g*", markersize=15, label="Goal"
+            )
+            
+            # Plot the goal radius if provided
+            if goal_radius is not None:
+                goal_circle = plt.Circle(
+                    (robot_goal[0], robot_goal[1]), 
+                    goal_radius, 
+                    color='g', 
+                    fill=False, 
+                    linestyle='--', 
+                    linewidth=2,
+                    label="Goal Radius"
+                )
+                ax.add_patch(goal_circle)
 
         # Add legend
         ax.legend(loc="upper right")
@@ -1215,8 +1259,11 @@ def main():
             sampled_trajectories = nom_controller.get_sampled_trajectories()
             chosen_trajectory = nom_controller.get_chosen_trajectory()
 
+            # Get the goal radius from the environment
+            goal_radius = env.model.world.agent_radius  # This is the radius used to determine if goal is reached
+            
             # Visualize MPPI trajectories
-            visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal)
+            visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal, goal_radius)
 
             # If using DualGuard MPPI, set the HJ values
             if args.planner == "dualguard_mppi" and values is not None:
@@ -1252,6 +1299,8 @@ def main():
                     vehicle_angle,
                     current_vel,
                     safety_intervening=has_intervened,
+                    robot_goal=robot_goal,
+                    goal_radius=goal_radius,
                 )
             
             # Capture frame for video if recording
