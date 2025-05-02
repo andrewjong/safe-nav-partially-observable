@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import posggym
 from utils import calculate_linear_velocity
-from matplotlib.animation import FFMpegWriter
+from matplotlib.animation import FFMpegWriter, PillowWriter
 
 from skimage.morphology import dilation, disk
 # Local imports
@@ -381,25 +381,43 @@ class MapVisualizer:
     def start_video_recording(self):
         """Start recording video if enabled."""
         if self.record_video and self.video_path:
-            # Initialize video writer
-            self.video_writer = FFMpegWriter(fps=10)
+            try:
+                # Try to use FFMpegWriter first
+                self.video_writer = FFMpegWriter(fps=10)
+            except Exception:
+                # Fall back to PillowWriter if FFMpegWriter is not available
+                print("FFMpegWriter not available, falling back to PillowWriter")
+                self.video_writer = PillowWriter(fps=10)
             
-            # Start recording from HJ figure if it exists, otherwise from MPPI figure
+            # Set up the writer with the appropriate figure
             if self.hj_fig is not None:
-                self.video_writer.setup(self.hj_fig, self.video_path)
+                self.video_writer.setup(self.hj_fig, self.video_path, dpi=100)
             elif self.mppi_fig is not None:
-                self.video_writer.setup(self.mppi_fig, self.video_path)
+                self.video_writer.setup(self.mppi_fig, self.video_path, dpi=100)
     
     def stop_video_recording(self):
         """Stop recording video if enabled."""
         if self.record_video and self.video_writer is not None:
-            self.video_writer.finish()
+            try:
+                self.video_writer.finish()
+            except Exception as e:
+                print(f"Error finishing video recording: {e}")
             self.video_writer = None
     
     def capture_frame(self):
         """Capture a frame for the video if recording is enabled."""
         if self.record_video and self.video_writer is not None:
-            self.video_writer.grab_frame()
+            try:
+                # Make sure figures are drawn before capturing
+                if self.hj_fig is not None:
+                    self.hj_fig.canvas.draw()
+                if self.mppi_fig is not None:
+                    self.mppi_fig.canvas.draw()
+                
+                # Grab the frame
+                self.video_writer.grab_frame()
+            except Exception as e:
+                print(f"Error capturing video frame: {e}")
     
     def reset(self):
         """Reset the visualization to its initial state."""
@@ -1017,9 +1035,9 @@ def main():
         os.makedirs(experiment_dir, exist_ok=True)
         
         # Set up file paths
-        video_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_video.mp4")
         data_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_data.csv")
         params_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_params.yaml")
+        # Video path will be set for each trial
         
         # Save experiment parameters
         experiment_params = {
@@ -1042,7 +1060,7 @@ def main():
             writer = csv.writer(f)
             writer.writerow(['trial', 'steps', 'collision', 'reached_goal'])
     else:
-        video_path = None
+        experiment_dir = None
         data_path = None
         experiment_number = None
     
@@ -1088,7 +1106,7 @@ def main():
 
     # Initialize occupancy map and visualizer
     occupancy_map = OccupancyMap(map_width, map_height, MAP_RESOLUTION)
-    visualizer = MapVisualizer(occupancy_map, record_video=args.record, video_path=video_path)
+    visualizer = MapVisualizer(occupancy_map, record_video=False)  # We'll set up recording for each trial
 
     # Run for the specified number of trials
     for trial in range(args.num_trials):
@@ -1135,8 +1153,12 @@ def main():
             if args.use_info_gain:
                 print(f"Information gain enabled with weight {args.info_gain_weight}")
         
-        # Start video recording for this trial if enabled
+        # Set up video recording for this trial if enabled
         if args.record:
+            # Create a unique video path for this trial
+            video_path = os.path.join(experiment_dir, f"experiment_{experiment_number}_trial_{trial+1}_video.mp4")
+            visualizer.record_video = True
+            visualizer.video_path = video_path
             visualizer.start_video_recording()
         
         # Initialize trial data
