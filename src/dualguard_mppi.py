@@ -7,9 +7,11 @@ class DualGuardMPPI(MPPI):
     """
     DualGuard MPPI: An extension of MPPI that uses HJ Reachability to ensure safety during sampling.
     
-    This implementation:
-    1. Uses the gradient of HJ values to guide sampling away from unsafe regions
-    2. Checks the final trajectory against the unsafe set to ensure safety
+    This implementation uses a least restrictive filter approach:
+    1. Uses the gradient of HJ values to guide only unsafe samples away from unsafe regions
+    2. Applies safety costs only to trajectories that enter unsafe regions
+    3. Only overrides the nominal action with a safe action if the nominal action leads to unsafe states
+    4. Uses grid search to find the control that maximizes the gradient of the value function
     """
 
     def __init__(
@@ -157,8 +159,8 @@ class DualGuardMPPI(MPPI):
     
     def _apply_hj_guidance_to_noise(self):
         """
-        Apply HJ reachability guidance to the noise samples.
-        This steers the sampling away from unsafe regions.
+        Apply HJ reachability guidance to the noise samples using a least restrictive approach.
+        This only modifies samples that would lead to unsafe states.
         """
         # Current state
         state = self.state.cpu().numpy()
@@ -184,28 +186,58 @@ class DualGuardMPPI(MPPI):
         # Control jacobian
         g_x = np.array([[0, 0], [0, 0], [1, 0], [0, 1]])
         
-        # Compute the direction that increases safety
+        # Safety constraint: grad_V^T * (f(x) + g(x)*u) >= 0
+        # Simplify to: grad_V^T * f(x) + grad_V^T * g(x) * u >= 0
+        # Further simplify to: grad_V^T * g(x) * u >= -grad_V^T * f(x)
         lhs = grad_V @ g_x  # Left-hand side coefficient for u
+        rhs = -grad_V @ f_x  # Right-hand side constant term
         
-        # If the gradient is significant, use it to guide the noise
+        # If the gradient is significant, check each noise sample
         if np.linalg.norm(lhs) > 1e-6:
             # Convert to torch tensor
             lhs_tensor = torch.tensor(lhs, device=self.d, dtype=self.dtype)
+            rhs_tensor = torch.tensor(rhs, device=self.d, dtype=self.dtype)
             
-            # Create time scaling factors for all time steps at once
-            time_scales = 1.0 / (1.0 + 0.1 * torch.arange(self.T, device=self.d, dtype=self.dtype))
+            # Process in batches to avoid memory issues
+            batch_size = 100  # Adjust based on available memory
             
-            # Compute safety bias for all time steps at once
-            safety_bias = self.gradient_scale * lhs_tensor.unsqueeze(0).unsqueeze(0) * time_scales.unsqueeze(1)
-            
-            # Apply the guidance to all noise samples at once
-            self.noise += safety_bias
+            for k_batch in range(0, self.K, batch_size):
+                k_end = min(k_batch + batch_size, self.K)
+                
+                # Get the perturbed actions for this batch
+                # U is the nominal control sequence
+                perturbed_actions = self.U + self.noise[k_batch:k_end]
+                
+                # Check each time step
+                for t in range(self.T):
+                    # Get the control inputs for this time step
+                    u_batch = perturbed_actions[:, t]
+                    
+                    # Check safety constraint for each control
+                    safety_values = torch.matmul(u_batch, lhs_tensor) + rhs_tensor
+                    
+                    # Find unsafe controls
+                    unsafe_mask = safety_values < 0
+                    
+                    # Only modify unsafe controls
+                    if torch.any(unsafe_mask):
+                        # Time scaling factor (stronger guidance for earlier steps)
+                        time_scale = 1.0 / (1.0 + 0.1 * t)
+                        
+                        # Compute safety bias for unsafe controls
+                        safety_bias = time_scale * self.gradient_scale * lhs_tensor
+                        
+                        # Apply the guidance only to unsafe samples
+                        for i, is_unsafe in enumerate(unsafe_mask):
+                            if is_unsafe:
+                                idx = k_batch + i
+                                self.noise[idx, t] += safety_bias
     
     def _apply_safety_cost_to_rollouts(self):
         """
         Apply an additional safety cost to the rollouts based on HJ values.
         This penalizes trajectories that enter unsafe regions.
-        Optimized with batch processing for better performance.
+        Uses a least restrictive approach by only penalizing unsafe trajectories.
         """
         # Get the states from the rollouts
         # states shape: M x K x T x nx
@@ -225,17 +257,31 @@ class DualGuardMPPI(MPPI):
                 k_end = min(k_batch + batch_size, K)
                 k_range = range(k_batch, k_end)
                 
+                # Track which trajectories are unsafe
+                unsafe_trajectories = set()
+                
+                # First check if any state in the trajectory is unsafe
                 for t in range(T):
                     # Get states for this batch and time step
                     batch_states = self.states[m, k_batch:k_end, t].cpu().numpy()
                     
                     # Check safety for all states in the batch
                     for i, k in enumerate(k_range):
+                        # Skip if this trajectory is already known to be unsafe
+                        if k in unsafe_trajectories:
+                            continue
+                            
                         state = batch_states[i]
-                        is_safe, _, _ = self.hj_solver.check_if_safe(state, self.hj_values)
+                        is_safe, value, _ = self.hj_solver.check_if_safe(state, self.hj_values)
                         
                         if not is_safe:
-                            safety_cost[m, k] += time_penalties[t] * 100.0
+                            # Mark this trajectory as unsafe
+                            unsafe_trajectories.add(k)
+                            
+                            # Add a penalty proportional to how unsafe the state is
+                            # and when the violation occurs (earlier violations are worse)
+                            safety_margin = abs(value - self.safety_threshold)
+                            safety_cost[m, k] += time_penalties[t] * 100.0 * (1.0 + safety_margin)
         
         # Add the safety cost to the total cost
         self.cost_total += safety_cost.mean(dim=0)
@@ -291,17 +337,129 @@ class DualGuardMPPI(MPPI):
                 break
         
         if is_unsafe:
-            # If any state in the trajectory is unsafe, compute a safe action
-            action, _, _, _ = self.hj_solver.compute_safe_control(
+            # If any state in the trajectory is unsafe, compute a safe action using grid search
+            safe_action = self._compute_safe_control_grid_search(
                 state_np,
                 nominal_action.cpu().numpy(),
-                action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]]),
-                values=self.hj_values,
-                values_grad=self.hj_values_grad
+                action_bounds=np.array([[-np.pi/4, np.pi/4], [-0.25, 0.25]])
             )
-            return torch.tensor(action, device=self.d, dtype=self.dtype)
+            return torch.tensor(safe_action, device=self.d, dtype=self.dtype)
         
         # If the entire trajectory is safe, return the nominal action
+        return nominal_action
+    
+    def _compute_safe_control_grid_search(self, state, nominal_action, action_bounds):
+        """
+        Compute a safe control action using grid search to find the control that maximizes
+        the gradient of the value function.
+        
+        Args:
+            state: Current state of the system
+            nominal_action: Nominal action from MPPI
+            action_bounds: Bounds for the control inputs
+            
+        Returns:
+            np.ndarray: Safe control action
+        """
+        # Get state indices in the grid
+        state_ind = self.hj_solver.state_to_grid(state)
+        
+        # Extract the gradient at the current state
+        grad_x = self.hj_values_grad[0][tuple(state_ind)]
+        grad_y = self.hj_values_grad[1][tuple(state_ind)]
+        grad_theta = self.hj_values_grad[2][tuple(state_ind)]
+        grad_v = self.hj_values_grad[3][tuple(state_ind)]
+        
+        # Gradient of the value function at the current state
+        grad_V = np.array([grad_x, grad_y, grad_theta, grad_v])
+        
+        # Extract state components
+        x, y, theta, v = state
+        
+        # Open loop dynamics contribution
+        f_x = np.array([v * np.sin(theta), v * np.cos(theta), 0.0, 0.0])
+        
+        # Control jacobian
+        g_x = np.array([[0, 0], [0, 0], [1, 0], [0, 1]])
+        
+        # Safety constraint: grad_V^T * (f(x) + g(x)*u) >= 0
+        # Simplify to: grad_V^T * f(x) + grad_V^T * g(x) * u >= 0
+        # Further simplify to: grad_V^T * g(x) * u >= -grad_V^T * f(x)
+        lhs = grad_V @ g_x  # Left-hand side coefficient for u
+        rhs = -grad_V @ f_x  # Right-hand side constant term
+        
+        # Grid search parameters
+        n_grid_points = 20  # Number of grid points in each dimension
+        
+        # Create grid of possible control inputs
+        angular_vel_grid = np.linspace(action_bounds[0, 0], action_bounds[0, 1], n_grid_points)
+        linear_acc_grid = np.linspace(action_bounds[1, 0], action_bounds[1, 1], n_grid_points)
+        
+        # Initialize variables to track the best action
+        best_action = nominal_action.copy()
+        best_safety_margin = float("-inf")
+        
+        # First check if the nominal action is safe
+        nominal_safety_value = lhs @ nominal_action + rhs
+        
+        # If the nominal action is safe, return it (least restrictive approach)
+        if nominal_safety_value >= 0:
+            return nominal_action
+        
+        # Perform grid search to find the action that maximizes the safety margin
+        for ang_vel in angular_vel_grid:
+            for lin_acc in linear_acc_grid:
+                # Current control input
+                u = np.array([ang_vel, lin_acc])
+                
+                # Check if this control satisfies the safety constraint
+                safety_value = lhs @ u + rhs
+                
+                # If the control is safe and has a better safety margin, update best action
+                if safety_value > best_safety_margin:
+                    best_safety_margin = safety_value
+                    best_action = u.copy()
+        
+        # If we found a safe action, use it
+        if best_safety_margin >= 0:
+            # Calculate distance to nominal action
+            distance_to_nominal = np.linalg.norm(best_action - nominal_action)
+            
+            # Blend between nominal and safe action based on safety margin
+            # This creates a smoother transition between nominal and safe control
+            alpha = min(1.0, 0.5 + 0.5 * best_safety_margin)  # Blend factor
+            blended_action = alpha * best_action + (1 - alpha) * nominal_action
+            
+            # Ensure the blended action is still safe
+            blended_safety = lhs @ blended_action + rhs
+            
+            # If blended action is safe, use it; otherwise use the best action
+            if blended_safety >= 0:
+                return blended_action
+            else:
+                return best_action
+        
+        # If no safe action was found, use a fallback strategy
+        # Move in the direction of the gradient of the value function
+        if np.linalg.norm(lhs) > 1e-6:  # Ensure we don't divide by zero
+            # Normalize the gradient direction
+            control_direction = lhs / np.linalg.norm(lhs)
+            
+            # Scale the control direction to fit within bounds
+            action = np.zeros(2)
+            action[0] = np.clip(
+                nominal_action[0] + 0.5 * control_direction[0],
+                action_bounds[0, 0],
+                action_bounds[0, 1]
+            )
+            action[1] = np.clip(
+                nominal_action[1] + 0.5 * control_direction[1],
+                action_bounds[1, 0],
+                action_bounds[1, 1]
+            )
+            return action
+        
+        # If all else fails, return the nominal action
         return nominal_action
     
     def get_chosen_trajectory(self, state):
