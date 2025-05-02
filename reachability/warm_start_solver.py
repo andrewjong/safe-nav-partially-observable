@@ -322,7 +322,7 @@ class WarmStartSolver:
         action = nominal_action.copy()
         has_intervened = not is_safe
 
-        # If the current state is not safe, compute a safe action
+        # If the current state is not safe, compute a safe action using grid search
         if not is_safe:
             # Get the state indices in the grid
             state_ind = self._state_to_grid(state)
@@ -338,21 +338,6 @@ class WarmStartSolver:
             
             # Extract state components
             x, y, theta, v = state
-            
-            # Define the dynamics of the system
-            # Open loop dynamics: [v*cos(theta), v*sin(theta), 0, 0]
-            # Control jacobian: [[0, 0], [0, 0], [1, 0], [0, 1]]
-            
-            # Set up the optimization problem
-            u = cp.Variable(2)  # Control input [angular_velocity, linear_acceleration]
-            
-            # Objective: Minimize the squared distance between u and nominal_action
-            objective = cp.Minimize(cp.sum_squares(u - nominal_action))
-            
-            # Constraint: The control should move the system towards the safe set
-            # This means the time derivative of V should be non-negative: dV/dt >= 0
-            # dV/dt = grad_V^T * (f(x) + g(x)*u)
-            # where f(x) is the open loop dynamics and g(x) is the control jacobian
             
             # Open loop dynamics contribution
             f_x = np.array([v * np.cos(theta), v * np.sin(theta), 0.0, 0.0])
@@ -372,39 +357,53 @@ class WarmStartSolver:
             lhs = grad_V @ g_x  # Left-hand side coefficient for u
             rhs = -grad_V @ f_x  # Right-hand side constant term
             
-            # Add safety constraint
-            constraints = [lhs @ u >= rhs]
+            # Grid search parameters
+            n_grid_points = 15  # Number of grid points in each dimension
             
-            # Add control bounds
-            constraints.append(u[0] >= action_bounds[0, 0])  # min angular velocity
-            constraints.append(u[0] <= action_bounds[0, 1])  # max angular velocity
-            constraints.append(u[1] >= action_bounds[1, 0])  # min linear acceleration
-            constraints.append(u[1] <= action_bounds[1, 1])  # max linear acceleration
+            # Create grid of possible control inputs
+            angular_vel_grid = np.linspace(action_bounds[0, 0], action_bounds[0, 1], n_grid_points)
+            linear_acc_grid = np.linspace(action_bounds[1, 0], action_bounds[1, 1], n_grid_points)
             
-            # Solve the optimization problem
-            prob = cp.Problem(objective, constraints)
-            try:
-                prob.solve()
-                
-                # Check if the problem was solved successfully
-                if prob.status == cp.OPTIMAL or prob.status == cp.OPTIMAL_INACCURATE:
-                    # Update the action with the safe control
-                    action = u.value
-                else:
-                    # If optimization failed, use a simple backup strategy:
-                    # Move in the direction of the gradient of the value function
-                    # This is a simple approach that may not be optimal but should improve safety
-                    control_direction = lhs / (np.linalg.norm(lhs) + 1e-6)  # Normalize
+            # Initialize variables to track the best action
+            best_action = nominal_action.copy()
+            min_distance = float('inf')
+            
+            # Perform grid search
+            for ang_vel in angular_vel_grid:
+                for lin_acc in linear_acc_grid:
+                    # Current control input
+                    u = np.array([ang_vel, lin_acc])
+                    
+                    # Check if this control satisfies the safety constraint
+                    safety_value = lhs @ u + rhs
+                    
+                    # If the control is safe (safety_value >= 0), check if it's closer to nominal
+                    if safety_value >= 0:
+                        # Calculate distance to nominal action
+                        distance = np.sum((u - nominal_action)**2)
+                        
+                        # Update best action if this one is closer to nominal
+                        if distance < min_distance:
+                            min_distance = distance
+                            best_action = u.copy()
+            
+            # If we found a safe action, use it
+            if min_distance < float('inf'):
+                action = best_action
+            else:
+                # If no safe action was found in the grid, use a fallback strategy
+                # Move in the direction of the gradient of the value function
+                if np.linalg.norm(lhs) > 1e-6:  # Ensure we don't divide by zero
+                    control_direction = lhs / np.linalg.norm(lhs)  # Normalize
                     
                     # Scale the control direction to fit within bounds
                     action[0] = np.clip(nominal_action[0] + 0.5 * control_direction[0], 
                                        action_bounds[0, 0], action_bounds[0, 1])
                     action[1] = np.clip(nominal_action[1] + 0.5 * control_direction[1], 
                                        action_bounds[1, 0], action_bounds[1, 1])
-            except Exception as e:
-                print(f"Optimization failed: {e}")
-                # Fall back to nominal action if optimization fails completely
-                action = nominal_action
+                else:
+                    # If gradient is too small, just use the nominal action
+                    action = nominal_action
 
         return action, value, initial_value, has_intervened
 
