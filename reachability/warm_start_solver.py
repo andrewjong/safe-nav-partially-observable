@@ -292,7 +292,7 @@ class WarmStartSolver:
         return value > self.config.superlevel_set_epsilon, value, initial_value
 
     def compute_safe_control(
-        self, state, nominal_action, action_bounds, values=None, values_grad=None
+        self, state: np.ndarray, nominal_action: np.ndarray, action_bounds: np.ndarray, values:np.ndarray=None, values_grad=None
     ):
         """
         Args:
@@ -317,10 +317,6 @@ class WarmStartSolver:
                 self.config.accuracy,
             )
 
-        state = np.array(state)
-        # next_state = dubins_dynamics_tensor(
-        #     torch.tensor(state[np.newaxis, :]), action=torch.tensor(nominal_action[np.newaxis, :]), dt=1.0
-        # )[0].numpy()
         is_safe, value, initial_value = self.check_if_safe(state, values)
 
         action = nominal_action.copy()
