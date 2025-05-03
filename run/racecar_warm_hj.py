@@ -29,18 +29,20 @@ from reachability.warm_start_solver import WarmStartSolver, WarmStartSolverConfi
 from src.mppi import Navigator
 from src.dualguard_mppi import DualGuardNavigator
 
+from posggym.envs.continuous.driving_continuous import SUPPORTED_WORLDS
+
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
 MAX_STEPS_PER_TRIAL = 100
-NUM_TRIALS = 5
+NUM_TRIALS = 10
 
 # Environment setup
 MAP_RESOLUTION = 0.5  # units per cell
 N_SENSORS = 16
 # MAX_SENSOR_DISTANCE = 10.0
 MAX_SENSOR_DISTANCE = 5.0
-MAX_SENSOR_DISTANCE = 2.0
+# MAX_SENSOR_DISTANCE = 2.0
 # MAX_SENSOR_DISTANCE = 0.1
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
@@ -1004,8 +1006,7 @@ def parse_args():
     parser.add_argument(
         "--world", 
         type=str, 
-        choices=["14x14OneWall", "14x14Empty", "30x30OneWallDiagonal", "30x30EmptyStraight", 
-                 "30x30Empty", "30x30ScatteredObstacleField", "14x14Sparse"], 
+        choices=SUPPORTED_WORLDS.keys(), 
         default="14x14OneWall",
         help="World environment to use"
     )
