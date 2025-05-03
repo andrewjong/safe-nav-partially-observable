@@ -49,8 +49,8 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # FOV = np.pi / 3  # 45-degree view centered at the front of the agent
 # FOV = np.pi * 2
 
-MARK_FREE_RADIUS = 3.0
-GOAL_RADIUS = 0.5
+MARK_FREE_RADIUS = 2.0
+GOAL_RADIUS = 1.0
 
 # Experiment recording
 RECORD_DIR = "experiments"
