@@ -773,9 +773,25 @@ class MapVisualizer:
             
         ax = self.hj_fig.add_subplot(111)
         
-        # Initialize empty lists for trajectory lines if they don't exist yet
-        ax.hj_mppi_lines = []
-        ax.hj_chosen_line = None
+        # Restore the saved trajectory lines
+        ax.hj_mppi_lines = hj_mppi_lines
+        ax.hj_chosen_line = hj_chosen_line
+        
+        # Redraw the saved trajectory lines
+        for line in hj_mppi_lines:
+            # Get the data from the original line
+            x_data, y_data = line.get_data()
+            # Create a new line with the same data and properties
+            new_line = ax.plot(x_data, y_data, "b-", alpha=0.1, linewidth=1)[0]
+            # Replace the old line reference with the new one
+            ax.hj_mppi_lines[ax.hj_mppi_lines.index(line)] = new_line
+            
+        # Redraw the chosen trajectory line if it exists
+        if hj_chosen_line is not None:
+            x_data, y_data = hj_chosen_line.get_data()
+            ax.hj_chosen_line = ax.plot(
+                x_data, y_data, "g-", alpha=0.8, linewidth=2, label="Chosen Trajectory"
+            )[0]
 
         # Get the current slice of the value function at the current vehicle angle
         state = np.array([vehicle_x, vehicle_y, vehicle_angle, vehicle_velocity])
