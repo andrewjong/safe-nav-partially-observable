@@ -749,6 +749,10 @@ class MapVisualizer:
             robot_goal (tuple, optional): The goal position (x, y) for the robot
             goal_radius (float, optional): The radius around the goal that counts as reaching the goal
         """
+        # Initialize variables to store trajectory lines
+        hj_mppi_lines = []
+        hj_chosen_line = None
+        
         # Check if we already have a figure for HJ visualization
         if self.hj_fig is None:
             self.hj_fig = plt.figure(figsize=(10, 8), num="HJ Visualization")
@@ -758,8 +762,6 @@ class MapVisualizer:
             
             # Store any existing MPPI trajectory lines before clearing
             ax = self.hj_fig.axes[0] if len(self.hj_fig.axes) > 0 else None
-            hj_mppi_lines = []
-            hj_chosen_line = None
             
             if ax is not None:
                 # Save existing trajectory lines if they exist
@@ -773,25 +775,34 @@ class MapVisualizer:
             
         ax = self.hj_fig.add_subplot(111)
         
-        # Restore the saved trajectory lines
-        ax.hj_mppi_lines = hj_mppi_lines
-        ax.hj_chosen_line = hj_chosen_line
+        # Initialize trajectory line attributes
+        ax.hj_mppi_lines = []
+        ax.hj_chosen_line = None
         
-        # Redraw the saved trajectory lines
-        for line in hj_mppi_lines:
-            # Get the data from the original line
-            x_data, y_data = line.get_data()
-            # Create a new line with the same data and properties
-            new_line = ax.plot(x_data, y_data, "b-", alpha=0.1, linewidth=1)[0]
-            # Replace the old line reference with the new one
-            ax.hj_mppi_lines[ax.hj_mppi_lines.index(line)] = new_line
+        # Restore and redraw the saved trajectory lines if they exist
+        if len(hj_mppi_lines) > 0:
+            ax.hj_mppi_lines = []
+            for line in hj_mppi_lines:
+                try:
+                    # Get the data from the original line
+                    x_data, y_data = line.get_data()
+                    # Create a new line with the same data and properties
+                    new_line = ax.plot(x_data, y_data, "b-", alpha=0.1, linewidth=1)[0]
+                    # Add to the list of lines
+                    ax.hj_mppi_lines.append(new_line)
+                except Exception as e:
+                    print(f"Error redrawing MPPI line: {e}")
             
         # Redraw the chosen trajectory line if it exists
         if hj_chosen_line is not None:
-            x_data, y_data = hj_chosen_line.get_data()
-            ax.hj_chosen_line = ax.plot(
-                x_data, y_data, "g-", alpha=0.8, linewidth=2, label="Chosen Trajectory"
-            )[0]
+            try:
+                x_data, y_data = hj_chosen_line.get_data()
+                ax.hj_chosen_line = ax.plot(
+                    x_data, y_data, "g-", alpha=0.8, linewidth=2, label="Chosen Trajectory"
+                )[0]
+            except Exception as e:
+                print(f"Error redrawing chosen line: {e}")
+                ax.hj_chosen_line = None
 
         # Get the current slice of the value function at the current vehicle angle
         state = np.array([vehicle_x, vehicle_y, vehicle_angle, vehicle_velocity])
