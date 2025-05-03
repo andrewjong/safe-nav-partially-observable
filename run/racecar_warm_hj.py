@@ -40,6 +40,7 @@ MAP_RESOLUTION = 0.5  # units per cell
 N_SENSORS = 16
 # MAX_SENSOR_DISTANCE = 10.0
 MAX_SENSOR_DISTANCE = 5.0
+MAX_SENSOR_DISTANCE = 2.0
 # MAX_SENSOR_DISTANCE = 0.1
 ROBOT_ORIGIN = [1, 1]
 FOV = np.pi / 4  # 45-degree view centered at the front of the agent
@@ -47,6 +48,7 @@ FOV = np.pi / 4  # 45-degree view centered at the front of the agent
 # FOV = np.pi * 2
 
 MARK_FREE_RADIUS = 3.0
+GOAL_RADIUS = 0.5
 
 # Experiment recording
 RECORD_DIR = "experiments"
@@ -1117,6 +1119,7 @@ def main():
         num_agents=1,
         n_sensors=N_SENSORS,
         obs_dist=MAX_SENSOR_DISTANCE,
+        goal_radius=GOAL_RADIUS,
         fov=FOV,
         render_mode="human",
     )
@@ -1258,12 +1261,9 @@ def main():
             # Get and visualize MPPI trajectories
             sampled_trajectories = nom_controller.get_sampled_trajectories()
             chosen_trajectory = nom_controller.get_chosen_trajectory()
-
-            # Get the goal radius from the environment
-            goal_radius = env.model.world.agent_radius  # This is the radius used to determine if goal is reached
             
             # Visualize MPPI trajectories
-            visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal, goal_radius)
+            visualizer.visualize_mppi_trajectories(sampled_trajectories, chosen_trajectory, robot_goal, GOAL_RADIUS)
 
             # If using DualGuard MPPI, set the HJ values
             if args.planner == "dualguard_mppi" and values is not None:
@@ -1300,7 +1300,7 @@ def main():
                     current_vel,
                     safety_intervening=has_intervened,
                     robot_goal=robot_goal,
-                    goal_radius=goal_radius,
+                    goal_radius=GOAL_RADIUS,
                 )
             
             # Capture frame for video if recording
