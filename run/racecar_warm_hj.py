@@ -1083,6 +1083,42 @@ def parse_args():
         default=MAX_STEPS_PER_TRIAL,
         help=f"Maximum number of steps per trial (default: {MAX_STEPS_PER_TRIAL})"
     )
+    parser.add_argument(
+        "--map_resolution",
+        type=float,
+        default=MAP_RESOLUTION,
+        help=f"Resolution of the occupancy map in world units per cell (default: {MAP_RESOLUTION})"
+    )
+    parser.add_argument(
+        "--n_sensors",
+        type=int,
+        default=N_SENSORS,
+        help=f"Number of lidar sensors (default: {N_SENSORS})"
+    )
+    parser.add_argument(
+        "--max_sensor_distance",
+        type=float,
+        default=MAX_SENSOR_DISTANCE,
+        help=f"Maximum sensing distance for lidar (default: {MAX_SENSOR_DISTANCE})"
+    )
+    parser.add_argument(
+        "--fov",
+        type=float,
+        default=FOV,
+        help=f"Field of view in radians (default: {FOV})"
+    )
+    parser.add_argument(
+        "--mark_free_radius",
+        type=float,
+        default=MARK_FREE_RADIUS,
+        help=f"Radius around the robot to mark as free space (default: {MARK_FREE_RADIUS})"
+    )
+    parser.add_argument(
+        "--goal_radius",
+        type=float,
+        default=GOAL_RADIUS,
+        help=f"Radius around the goal to consider it reached (default: {GOAL_RADIUS})"
+    )
     return parser.parse_args()
 
 def main():
@@ -1122,6 +1158,12 @@ def main():
             'safety_threshold': args.safety_threshold,
             'num_trials': args.num_trials,
             'max_steps_per_trial': args.max_steps_per_trial,
+            'map_resolution': args.map_resolution,
+            'n_sensors': args.n_sensors,
+            'max_sensor_distance': args.max_sensor_distance,
+            'fov': args.fov,
+            'mark_free_radius': args.mark_free_radius,
+            'goal_radius': args.goal_radius,
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         
