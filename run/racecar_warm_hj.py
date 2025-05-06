@@ -1126,6 +1126,19 @@ def main():
     # Parse command-line arguments
     args = parse_args()
     
+    # Update global constants based on command line arguments
+    global MAX_STEPS_PER_TRIAL, NUM_TRIALS, MAP_RESOLUTION, N_SENSORS
+    global MAX_SENSOR_DISTANCE, FOV, MARK_FREE_RADIUS, GOAL_RADIUS
+    
+    MAX_STEPS_PER_TRIAL = args.max_steps_per_trial
+    NUM_TRIALS = args.num_trials
+    MAP_RESOLUTION = args.map_resolution
+    N_SENSORS = args.n_sensors
+    MAX_SENSOR_DISTANCE = args.max_sensor_distance
+    FOV = args.fov
+    MARK_FREE_RADIUS = args.mark_free_radius
+    GOAL_RADIUS = args.goal_radius
+    
     # Set up experiment recording
     if args.record:
         # Create experiments directory if it doesn't exist
